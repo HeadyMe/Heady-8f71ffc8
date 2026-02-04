@@ -1,0 +1,46 @@
+# HEADY_BRAND:BEGIN
+# HEADY SYSTEMS :: SACRED GEOMETRY
+# FILE: .gitignore
+# LAYER: root
+# 
+#         _   _  _____    _    ____   __   __
+#        | | | || ____|  / \  |  _ \ \ \ / /
+#        | |_| ||  _|   / _ \ | | | | \ V / 
+#        |  _  || |___ / ___ \| |_| |  | |  
+#        |_| |_||_____/_/   \_\____/   |_|  
+# 
+#    Sacred Geometry :: Organic Systems :: Breathing Interfaces
+# HEADY_BRAND:END
+
+__pycache__/
+*.pyc
+<<<<<<< C:/Users/erich/Heady/.gitignore
+=======
+venv/
+.venv/
+<<<<<<< C:/Users/erich/Heady/.gitignore
+>>>>>>> C:/Users/erich/.windsurf/worktrees/Heady/Heady-b7f06678/.gitignore
+=======
+>>>>>>> C:/Users/erich/.windsurf/worktrees/Heady/Heady-b7f06678/.gitignore
+node_modules/
+dist/
+build/
+.env
+.pytest_cache/
+heady-manifest.json
+.heady_secrets
+<<<<<<< C:/Users/erich/Heady/.gitignore
+<<<<<<< C:/Users/erich/Heady/.gitignore
+venv/
+.venv/
+*.log
+=======
+*.log
+logs/
+HeadyAcademy/Content_Forge/Visualizations/
+>>>>>>> C:/Users/erich/.windsurf/worktrees/Heady/Heady-b7f06678/.gitignore
+=======
+*.log
+logs/
+HeadyAcademy/Content_Forge/Visualizations/
+>>>>>>> C:/Users/erich/.windsurf/worktrees/Heady/Heady-b7f06678/.gitignore

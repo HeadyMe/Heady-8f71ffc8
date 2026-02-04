@@ -1,0 +1,20 @@
+# HEADY_BRAND:BEGIN
+# HEADY SYSTEMS :: SACRED GEOMETRY
+# FILE: HeadyAcademy/Tools/Security/requirements.txt
+# LAYER: root
+# 
+#         _   _  _____    _    ____   __   __
+#        | | | || ____|  / \  |  _ \ \ \ / /
+#        | |_| ||  _|   / _ \ | | | | \ V / 
+#        |  _  || |___ / ___ \| |_| |  | |  
+#        |_| |_||_____/_/   \_\____/   |_|  
+# 
+#    Sacred Geometry :: Organic Systems :: Breathing Interfaces
+# HEADY_BRAND:END
+
+# Security Tools Dependencies
+cryptography>=41.0.0
+PyJWT>=2.8.0
+requests>=2.31.0
+websockets>=12.0
+python-dotenv>=1.0.0

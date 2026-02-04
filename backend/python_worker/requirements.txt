@@ -1,0 +1,27 @@
+# HEADY_BRAND:BEGIN
+# HEADY SYSTEMS :: SACRED GEOMETRY
+# FILE: backend/python_worker/requirements.txt
+# LAYER: backend
+# 
+#         _   _  _____    _    ____   __   __
+#        | | | || ____|  / \  |  _ \ \ \ / /
+#        | |_| ||  _|   / _ \ | | | | \ V / 
+#        |  _  || |___ / ___ \| |_| |  | |  
+#        |_| |_||_____/_/   \_\____/   |_|  
+# 
+#    Sacred Geometry :: Organic Systems :: Breathing Interfaces
+# HEADY_BRAND:END
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+requests>=2.31.0
+python-dotenv>=1.0.0
+psycopg2-binary>=2.9.9
+pytest>=7.0.0
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+python-multipart>=0.0.6
+transformers>=4.30.0
+torch>=2.0.0
+sentencepiece>=0.1.99
+httpx>=0.24.0
+websockets>=10.0
