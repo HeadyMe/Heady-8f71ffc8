@@ -47,3 +47,5 @@ notebooks/personal/*
 # Secrets
 .heady/memory.db
 .heady/*.db
+*.db
+.heady/.heady/

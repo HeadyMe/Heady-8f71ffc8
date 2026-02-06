@@ -391,3 +391,26 @@ fileUpdateZones:
     - "Human approval for destructive operations (delete, overwrite)"
     - "Version control and rollback for all managed files"
     - "Audit trail: what changed, when, by which component"
+
+# ─── Checkpoint-Rebuild Protocol ──────────────────────────────────────
+checkpointRebuild:
+  standingRule: "Every checkpoint triggers a full project rebuild from scratch"
+  purpose: "Eliminate drift between perceived and actual system state"
+  trigger_events:
+    - commit
+    - merge
+    - pipeline_stage_complete
+    - release
+    - manual_checkpoint
+  steps:
+    - "Snapshot: tag current state"
+    - "Scaffold: run hc-scaffold-fresh to temp dir"
+    - "Migrate: copy src/, configs/, docs/, scripts/, .windsurf/, root files"
+    - "Diff: compare scaffold vs current project, flag orphans/missing"
+    - "Validate: npm install + heady-manager boot"
+    - "Registry Check: heady-registry.json must match disk"
+    - "Doc Sync: DOC_OWNERS.yaml must cover all configs/ and docs/"
+    - "Pattern Store: zero invalid entries"
+    - "Pipeline Run: 0 failures"
+    - "Phone Sync: key files to CrossDevice HeadySystems"
+  enforcement: "Self-critique engine flags any checkpoint where rebuild was skipped"
