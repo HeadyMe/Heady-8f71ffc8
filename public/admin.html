@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HeadyMCP Admin</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--p:#00d4ff;--s:#7b2cbf;--a:#ff6b6b;--g:#4ecdc4;--bg1:#0f0c29;--bg2:#1a1a2e;--card:rgba(255,255,255,0.04);--border:rgba(255,255,255,0.08)}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg1);color:#e0e0e0;min-height:100vh}
+a{color:var(--p);text-decoration:none}
+
+/* NAV */
+nav{background:rgba(15,12,41,0.95);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:50}
+.nav-brand{font-size:1.1rem;font-weight:800;background:linear-gradient(135deg,var(--p),var(--s));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.nav-right{display:flex;gap:16px;align-items:center;font-size:.85rem}
+.nav-right a{color:rgba(255,255,255,.5)}
+
+/* LOGIN */
+#loginScreen{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 56px)}
+.login-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:40px;width:380px;text-align:center}
+.login-box h2{margin-bottom:8px;font-size:1.3rem}
+.login-box p{color:rgba(255,255,255,.45);font-size:.88rem;margin-bottom:24px}
+.input{width:100%;padding:12px 16px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;color:#fff;font-size:.9rem;outline:none;margin-bottom:12px}
+.input:focus{border-color:var(--p)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 22px;border-radius:10px;font-weight:600;font-size:.9rem;border:none;cursor:pointer;transition:all .2s;width:100%}
+.btn-primary{background:linear-gradient(135deg,var(--p),var(--s));color:#fff}
+.btn-primary:hover{box-shadow:0 6px 24px rgba(0,212,255,.2)}
+.btn-sm{padding:6px 14px;font-size:.8rem;width:auto;border-radius:8px}
+.btn-green{background:rgba(78,205,196,.15);color:var(--g);border:1px solid rgba(78,205,196,.3)}
+.btn-green:hover{background:rgba(78,205,196,.25)}
+.btn-red{background:rgba(255,107,107,.1);color:var(--a);border:1px solid rgba(255,107,107,.2)}
+.btn-red:hover{background:rgba(255,107,107,.2)}
+.btn-outline{background:transparent;border:1px solid rgba(0,212,255,.3);color:var(--p)}
+#loginError{color:var(--a);font-size:.85rem;margin-top:8px;min-height:20px}
+
+/* DASHBOARD */
+#dashboard{display:none;padding:24px;max-width:1200px;margin:0 auto}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:32px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px}
+.stat-label{font-size:.75rem;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:6px}
+.stat-value{font-size:2rem;font-weight:800}
+.stat-sub{font-size:.8rem;color:rgba(255,255,255,.35);margin-top:4px}
+
+/* SECTIONS */
+.section{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:24px}
+.section h3{font-size:1.1rem;font-weight:700;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;font-size:.75rem;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.35);padding:10px 12px;border-bottom:1px solid var(--border)}
+.tbl td{padding:10px 12px;font-size:.88rem;border-bottom:1px solid rgba(255,255,255,.04)}
+.tbl tr:hover td{background:rgba(255,255,255,.02)}
+.badge-status{display:inline-block;padding:3px 10px;border-radius:6px;font-size:.75rem;font-weight:600;letter-spacing:.5px}
+.badge-active{background:rgba(78,205,196,.12);color:var(--g);border:1px solid rgba(78,205,196,.25)}
+.badge-pending{background:rgba(255,193,7,.1);color:#ffc107;border:1px solid rgba(255,193,7,.2)}
+.badge-revoked{background:rgba(255,107,107,.1);color:var(--a);border:1px solid rgba(255,107,107,.2)}
+.badge-plan{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.72rem;font-weight:600;background:rgba(123,44,191,.12);color:var(--s);border:1px solid rgba(123,44,191,.2)}
+.actions{display:flex;gap:6px}
+.mono{font-family:'Consolas','Courier New',monospace;font-size:.78rem;color:rgba(255,255,255,.45)}
+.empty-state{text-align:center;padding:40px;color:rgba(255,255,255,.3);font-size:.9rem}
+
+/* REVENUE */
+.revenue-bar{height:8px;border-radius:4px;background:rgba(255,255,255,.06);margin-top:8px;overflow:hidden}
+.revenue-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--p),var(--s));transition:width .5s}
+
+@media(max-width:768px){
+  .stats-row{grid-template-columns:1fr 1fr}
+  .tbl{font-size:.8rem}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-brand">HeadyMCP Admin</a>
+  <div class="nav-right">
+    <a href="/">Home</a>
+    <a href="/connect.html">Connect</a>
+    <span id="navUser" style="color:var(--g);display:none"></span>
+    <a href="#" id="logoutBtn" style="color:var(--a);display:none" onclick="logout()">Logout</a>
+  </div>
+</nav>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-box">
+    <h2>Admin Access</h2>
+    <p>Enter your admin token to manage HeadyMCP users and billing.</p>
+    <input type="password" class="input" id="tokenInput" placeholder="Admin token" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="btn btn-primary" onclick="doLogin()">Sign In</button>
+    <div id="loginError"></div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Total Users</div>
+      <div class="stat-value" id="statTotal">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active</div>
+      <div class="stat-value" style="color:var(--g)" id="statActive">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Pending</div>
+      <div class="stat-value" style="color:#ffc107" id="statPending">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Monthly Revenue</div>
+      <div class="stat-value" style="color:var(--p)" id="statRevenue">$0</div>
+      <div class="stat-sub" id="statRevenueDetail"></div>
+      <div class="revenue-bar"><div class="revenue-fill" id="revenueFill" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- USERS TABLE -->
+  <div class="section">
+    <h3>
+      <span>Beta Users</span>
+      <button class="btn btn-sm btn-outline" onclick="loadUsers()">Refresh</button>
+    </h3>
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Plan</th>
+            <th>Status</th>
+            <th>API Key</th>
+            <th>Usage</th>
+            <th>Joined</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="usersBody">
+          <tr><td colspan="8" class="empty-state">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SYSTEM STATUS -->
+  <div class="section">
+    <h3><span>System Health</span></h3>
+    <div id="systemHealth" style="font-size:.9rem;color:rgba(255,255,255,.5)">Loading...</div>
+  </div>
+</div>
+
+<script>
+let adminToken = localStorage.getItem('heady_admin_token') || '';
+
+function doLogin() {
+  const val = document.getElementById('tokenInput').value.trim();
+  if (!val) { document.getElementById('loginError').textContent = 'Token required'; return; }
+  adminToken = val;
+  localStorage.setItem('heady_admin_token', val);
+  verifyAndLoad();
+}
+
+function logout() {
+  adminToken = '';
+  localStorage.removeItem('heady_admin_token');
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('logoutBtn').style.display = 'none';
+  document.getElementById('navUser').style.display = 'none';
+}
+
+async function verifyAndLoad() {
+  try {
+    const res = await fetch('/api/admin/users', { headers: { 'X-Admin-Token': adminToken } });
+    if (res.status === 401 || res.status === 403) {
+      document.getElementById('loginError').textContent = 'Invalid admin token';
+      return;
+    }
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('logoutBtn').style.display = 'inline';
+    document.getElementById('navUser').style.display = 'inline';
+    document.getElementById('navUser').textContent = 'Admin';
+    loadUsers();
+    loadHealth();
+  } catch (e) {
+    document.getElementById('loginError').textContent = 'Connection error';
+  }
+}
+
+async function loadUsers() {
+  try {
+    const res = await fetch('/api/admin/users', { headers: { 'X-Admin-Token': adminToken } });
+    const data = await res.json();
+    const users = data.users || [];
+    
+    const active = users.filter(u => u.status === 'active').length;
+    const pending = users.filter(u => u.status === 'pending').length;
+    document.getElementById('statTotal').textContent = users.length;
+    document.getElementById('statActive').textContent = active;
+    document.getElementById('statPending').textContent = pending;
+
+    const planPrices = { explorer: 0, starter: 29, pro: 99 };
+    let revenue = 0;
+    users.filter(u => u.status === 'active').forEach(u => { revenue += planPrices[u.plan] || 0; });
+    document.getElementById('statRevenue').textContent = '$' + revenue;
+    document.getElementById('statRevenueDetail').textContent = active + ' paying users';
+    const maxRev = Math.max(revenue, 500);
+    document.getElementById('revenueFill').style.width = Math.min(100, (revenue / maxRev) * 100) + '%';
+
+    const tbody = document.getElementById('usersBody');
+    if (users.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No users yet. Share your signup page!</td></tr>';
+      return;
+    }
+    tbody.innerHTML = users.map(u => {
+      const statusClass = u.status === 'active' ? 'badge-active' : u.status === 'pending' ? 'badge-pending' : 'badge-revoked';
+      const date = new Date(u.createdAt).toLocaleDateString();
+      const usage = (u.usage || 0) + ' calls';
+      return `<tr>
+        <td><strong>${esc(u.name)}</strong></td>
+        <td>${esc(u.email)}</td>
+        <td><span class="badge-plan">${u.plan}</span></td>
+        <td><span class="badge-status ${statusClass}">${u.status}</span></td>
+        <td class="mono">${u.apiKey ? u.apiKey.slice(0, 12) + '...' : '-'}</td>
+        <td>${usage}</td>
+        <td>${date}</td>
+        <td class="actions">
+          ${u.status === 'pending' ? `<button class="btn btn-sm btn-green" onclick="authorize('${u.id}')">Approve</button>` : ''}
+          ${u.status === 'active' ? `<button class="btn btn-sm btn-red" onclick="revoke('${u.id}')">Revoke</button>` : ''}
+          ${u.status === 'revoked' ? `<button class="btn btn-sm btn-green" onclick="authorize('${u.id}')">Reactivate</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('usersBody').innerHTML = '<tr><td colspan="8" class="empty-state">Failed to load users</td></tr>';
+  }
+}
+
+async function authorize(id) {
+  await fetch('/api/admin/users/' + id + '/authorize', { method: 'POST', headers: { 'X-Admin-Token': adminToken } });
+  loadUsers();
+}
+
+async function revoke(id) {
+  if (!confirm('Revoke access for this user?')) return;
+  await fetch('/api/admin/users/' + id + '/revoke', { method: 'POST', headers: { 'X-Admin-Token': adminToken } });
+  loadUsers();
+}
+
+async function loadHealth() {
+  try {
+    const res = await fetch('/api/health');
+    const data = await res.json();
+    const mc = data.monteCarlo || {};
+    document.getElementById('systemHealth').innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+        <div><strong>Status:</strong> <span style="color:var(--g)">${data.ok ? 'Healthy' : 'Degraded'}</span></div>
+        <div><strong>Uptime:</strong> ${Math.floor(data.uptime / 60)}m ${Math.floor(data.uptime % 60)}s</div>
+        <div><strong>MC Score:</strong> <span style="color:var(--p)">${mc.compositeScore ? mc.compositeScore.toFixed(1) : 'N/A'}</span></div>
+        <div><strong>MC Grade:</strong> ${mc.grade || 'N/A'}</div>
+        <div><strong>Pipeline:</strong> ${mc.pipeline ? (mc.pipeline.successRate * 100).toFixed(0) + '%' : 'N/A'}</div>
+        <div><strong>Deploy Risk:</strong> ${mc.deployment ? mc.deployment.riskGrade : 'N/A'}</div>
+      </div>`;
+  } catch (e) {
+    document.getElementById('systemHealth').textContent = 'Could not load health data';
+  }
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// Auto-login if token saved
+if (adminToken) verifyAndLoad();
+</script>
+</body>
+</html>

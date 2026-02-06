@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connect to HeadyMCP</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--p:#00d4ff;--s:#7b2cbf;--a:#ff6b6b;--g:#4ecdc4;--bg1:#0f0c29;--border:rgba(255,255,255,0.08);--card:rgba(255,255,255,0.04)}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg1);color:#e0e0e0;line-height:1.7}
+a{color:var(--p);text-decoration:none}
+a:hover{color:#fff}
+nav{background:rgba(15,12,41,0.95);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:50}
+.nav-brand{font-size:1.1rem;font-weight:800;background:linear-gradient(135deg,var(--p),var(--s));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.nav-links{display:flex;gap:20px;font-size:.88rem}
+.nav-links a{color:rgba(255,255,255,.5)}
+.wrap{max-width:800px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:2rem;font-weight:800;margin-bottom:.5rem}
+.subtitle{color:rgba(255,255,255,.45);margin-bottom:40px;font-size:1rem}
+.step{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:20px}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:rgba(0,212,255,.1);color:var(--p);font-weight:800;font-size:.9rem;margin-bottom:12px}
+.step h2{font-size:1.15rem;font-weight:700;margin-bottom:10px}
+.step p{color:rgba(255,255,255,.6);font-size:.92rem;margin-bottom:12px}
+pre{background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:16px 20px;overflow-x:auto;font-family:'Consolas','Courier New',monospace;font-size:.84rem;color:var(--p);line-height:1.6;margin-bottom:8px}
+code{font-family:'Consolas','Courier New',monospace;background:rgba(0,212,255,.08);padding:2px 6px;border-radius:4px;font-size:.85rem;color:var(--p)}
+.note{background:rgba(78,205,196,.06);border:1px solid rgba(78,205,196,.15);border-radius:10px;padding:16px 20px;font-size:.88rem;color:rgba(255,255,255,.6);margin-top:12px}
+.note strong{color:var(--g)}
+.warn{background:rgba(255,107,107,.06);border:1px solid rgba(255,107,107,.15);border-radius:10px;padding:16px 20px;font-size:.88rem;color:rgba(255,255,255,.6);margin-top:12px}
+.warn strong{color:var(--a)}
+.endpoints-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.ep{background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.05);border-radius:8px;padding:10px 14px}
+.ep .method{font-size:.7rem;font-weight:700;letter-spacing:1px;margin-bottom:2px}
+.ep .method.get{color:var(--g)}
+.ep .method.post{color:var(--p)}
+.ep .path{font-family:'Consolas',monospace;font-size:.82rem;color:rgba(255,255,255,.7)}
+.ep .desc{font-size:.75rem;color:rgba(255,255,255,.35);margin-top:2px}
+footer{border-top:1px solid var(--border);padding:30px;text-align:center;color:rgba(255,255,255,.3);font-size:.82rem}
+@media(max-width:600px){.endpoints-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-brand">HeadyMCP</a>
+  <div class="nav-links">
+    <a href="/">Home</a>
+    <a href="/#pricing">Pricing</a>
+    <a href="/admin.html">Admin</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <h1>Connect to HeadyMCP</h1>
+  <div class="subtitle">Get up and running in under 5 minutes. Works with Windsurf, VS Code, Claude Desktop, and any MCP-compatible client.</div>
+
+  <!-- STEP 1 -->
+  <div class="step">
+    <div class="step-num">1</div>
+    <h2>Sign Up for Beta Access</h2>
+    <p>Head to the <a href="/#signup">signup page</a> and request beta access. You'll receive an API key immediately. An admin will authorize your account for full access.</p>
+    <div class="note"><strong>Tip:</strong> Save your API key securely. You'll need it to authenticate all requests.</div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="step">
+    <div class="step-num">2</div>
+    <h2>Configure Your MCP Client</h2>
+    <p>Add HeadyMCP to your MCP client configuration. Here's the config for <strong>Windsurf / VS Code</strong>:</p>
+    <pre>{
+  "mcpServers": {
+    "heady": {
+      "url": "https://heady-manager-headysystems.onrender.com",
+      "transport": "sse",
+      "headers": {
+        "X-API-Key": "YOUR_API_KEY_HERE"
+      }
+    }
+  }
+}</pre>
+    <p>For <strong>Claude Desktop</strong>, add to <code>~/.claude/claude_desktop_config.json</code>:</p>
+    <pre>{
+  "mcpServers": {
+    "heady": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/client", 
+               "--sse", "https://heady-manager-headysystems.onrender.com"],
+      "env": {
+        "HEADY_API_KEY": "YOUR_API_KEY_HERE"
+      }
+    }
+  }
+}</pre>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="step">
+    <div class="step-num">3</div>
+    <h2>Verify Connection</h2>
+    <p>Test that your connection is working by hitting the health endpoint:</p>
+    <pre>curl -H "X-API-Key: YOUR_API_KEY" \
+  https://heady-manager-headysystems.onrender.com/api/health</pre>
+    <p>You should see:</p>
+    <pre>{"ok":true,"service":"heady-manager","version":"2.0.0",...}</pre>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="step">
+    <div class="step-num">4</div>
+    <h2>Start Using Services</h2>
+    <p>Once connected, you have access to these core capabilities:</p>
+    <div class="endpoints-grid">
+      <div class="ep"><div class="method get">GET</div><div class="path">/api/health</div><div class="desc">System health + Monte Carlo scores</div></div>
+      <div class="ep"><div class="method get">GET</div><div class="path">/api/registry</div><div class="desc">Component registry</div></div>
+      <div class="ep"><div class="method get">GET</div><div class="path">/api/pulse</div><div class="desc">System pulse + active layer</div></div>
+      <div class="ep"><div class="method get">GET</div><div class="path">/api/system/status</div><div class="desc">Full system status dashboard</div></div>
+      <div class="ep"><div class="method post">POST</div><div class="path">/api/conductor/orchestrate</div><div class="desc">Orchestrate AI tasks</div></div>
+      <div class="ep"><div class="method post">POST</div><div class="path">/api/pipeline/run</div><div class="desc">Trigger HCFullPipeline</div></div>
+      <div class="ep"><div class="method get">GET</div><div class="path">/api/pipeline/state</div><div class="desc">Current pipeline state</div></div>
+      <div class="ep"><div class="method get">GET</div><div class="path">/api/nodes</div><div class="desc">AI node network status</div></div>
+      <div class="ep"><div class="method post">POST</div><div class="path">/api/supervisor/route</div><div class="desc">Route tasks to agents</div></div>
+      <div class="ep"><div class="method get">GET</div><div class="path">/api/readiness/evaluate</div><div class="desc">Production readiness score</div></div>
+      <div class="ep"><div class="method get">GET</div><div class="path">/api/monte-carlo/status</div><div class="desc">MC simulation status</div></div>
+      <div class="ep"><div class="method post">POST</div><div class="path">/api/monte-carlo/full</div><div class="desc">Run full MC simulation</div></div>
+    </div>
+  </div>
+
+  <!-- STEP 5 -->
+  <div class="step">
+    <div class="step-num">5</div>
+    <h2>Example: Run the Full Pipeline</h2>
+    <p>Trigger a full 5-stage pipeline run:</p>
+    <pre>curl -X POST \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  https://heady-manager-headysystems.onrender.com/api/pipeline/run</pre>
+    <p>Then monitor progress:</p>
+    <pre>curl -H "X-API-Key: YOUR_API_KEY" \
+  https://heady-manager-headysystems.onrender.com/api/pipeline/state</pre>
+  </div>
+
+  <!-- DRUPAL 11 -->
+  <div class="step">
+    <div class="step-num">6</div>
+    <h2>Drupal 11 CMS Integration (Coming Soon)</h2>
+    <p>HeadyMCP's content layer runs on <strong>Drupal 11</strong>, providing full CMS capabilities for managing documentation, blog posts, and knowledge bases.</p>
+    <p>The Drupal 11 integration will be available at the <code>cloud-conn</code> layer for Pro tier users with features including:</p>
+    <ul style="margin:12px 0 0 20px;color:rgba(255,255,255,.55);font-size:.9rem">
+      <li>Content management with headless JSON:API</li>
+      <li>AI-generated documentation publishing</li>
+      <li>User portal and account management</li>
+      <li>Webhook integration with HeadyConductor</li>
+      <li>Custom content types for MCP tool documentation</li>
+    </ul>
+    <div class="note"><strong>Coming Q2 2026:</strong> Full Drupal 11 CMS deployment on the HeadyConnection layer.</div>
+  </div>
+
+  <!-- BILLING -->
+  <div class="step">
+    <div class="step-num">7</div>
+    <h2>Billing &amp; Usage</h2>
+    <p>Your usage is tracked per API call. View your current usage by checking the admin dashboard or via API:</p>
+    <pre>curl -H "X-API-Key: YOUR_API_KEY" \
+  https://heady-manager-headysystems.onrender.com/api/billing/usage</pre>
+    <p>Upgrade your plan anytime through the billing portal:</p>
+    <pre>curl -X POST \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"plan":"starter"}' \
+  https://heady-manager-headysystems.onrender.com/api/billing/checkout</pre>
+    <div class="warn"><strong>Rate Limits:</strong> Explorer: 100 calls/day | Starter: 2,000 calls/day | Pro: Unlimited</div>
+  </div>
+</div>
+
+<footer>
+  &copy; 2026 Heady Systems &middot; Sacred Geometry Architecture &middot; <a href="/">Home</a>
+</footer>
+</body>
+</html>

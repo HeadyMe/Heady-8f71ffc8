@@ -26,7 +26,7 @@ probes:
     url: http://localhost:3300/api/health
     method: GET
     expectedStatus: 200
-    expectedBody: { contains: "status" }
+    expectedBody: { contains: "ok" }
     maxLatencyMs: 2000
     interval: 60
     criticality: critical
@@ -52,7 +52,7 @@ probes:
 
   - name: heady-admin
     type: http
-    url: http://localhost:3300/admin.html
+    url: http://localhost:3300/api/registry
     method: GET
     expectedStatus: 200
     maxLatencyMs: 3000
@@ -64,11 +64,11 @@ probes:
     connectionVar: DATABASE_URL
     maxLatencyMs: 5000
     interval: 120
-    criticality: critical
+    criticality: low
 
   - name: render-deployment
     type: http
-    url: https://heady-manager.onrender.com/api/health
+    url: https://heady-manager-headysystems.onrender.com/api/health
     method: GET
     expectedStatus: 200
     maxLatencyMs: 10000

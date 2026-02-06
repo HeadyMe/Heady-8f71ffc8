@@ -45,6 +45,7 @@ const { pipeline: hcPipeline, registerTaskHandler, RunStatus } = require(path.jo
 const { claudeExecute, claudeAnalyzeCode, claudeSecurityAudit } = require(path.join(__dirname, "src", "hc_claude_agent"));
 const { registerAllHandlers, initializeSubsystems, getSubsystems } = require(path.join(__dirname, "src", "agents", "pipeline-handlers"));
 const { simulatePipelineReliability, simulateDeploymentRisk, simulateReadinessConfidence, simulateNodePerformance, simulateFullSystem, mcGlobal } = require(path.join(__dirname, "src", "hc_monte_carlo"));
+const { registerBillingRoutes } = require(path.join(__dirname, "src", "hc_billing"));
 
 // ─── Boot HCFullPipeline with all subsystems ─────────────────────────────
 // 1. Load pipeline configs (YAML → circuit breakers, stage DAG)
@@ -135,6 +136,9 @@ const limiter = rateLimit({
   legacyHeaders: false
 });
 app.use('/api/', limiter);
+
+// Register billing & user management routes
+registerBillingRoutes(app);
 
 // Enhanced caching middleware
 const cache = new Map();
@@ -1035,7 +1039,7 @@ app.post("/api/monte-carlo/readiness", async (req, res) => {
       const healthSnap = hcHealth.getSnapshot();
       if (healthSnap && healthSnap.results) {
         const total = Object.keys(healthSnap.results).length;
-        const healthy = Object.values(healthSnap.results).filter((r) => r.status === "pass").length;
+        const healthy = Object.values(healthSnap.results).filter((r) => r.status === "ok").length;
         signals.nodeAvailability = total > 0 ? healthy / total : signals.nodeAvailability;
       }
     } catch (_) { /* non-fatal enrichment */ }
