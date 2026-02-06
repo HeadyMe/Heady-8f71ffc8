@@ -64,6 +64,11 @@ function loadAllConfigs() {
   try { configs.agenticCoding = loadYaml("agentic-coding.yaml"); } catch (_) { configs.agenticCoding = {}; }
   try { configs.publicDomainIntegration = loadYaml("public-domain-integration.yaml"); } catch (_) { configs.publicDomainIntegration = {}; }
   try { configs.activationManifest = loadYaml("activation-manifest.yaml"); } catch (_) { configs.activationManifest = {}; }
+  try { configs.monteCarlo = loadYaml("monte-carlo-scheduler.yaml"); } catch (_) { configs.monteCarlo = {}; }
+  try { configs.selfAwareness = loadYaml("system-self-awareness.yaml"); } catch (_) { configs.selfAwareness = {}; }
+  try { configs.connectionIntegrity = loadYaml("connection-integrity.yaml"); } catch (_) { configs.connectionIntegrity = {}; }
+  try { configs.extensionPricing = loadYaml("extension-pricing.yaml"); } catch (_) { configs.extensionPricing = {}; }
+  try { configs.headyBuddy = loadYaml("heady-buddy.yaml"); } catch (_) { configs.headyBuddy = {}; }
   return configs;
 }
 
@@ -547,28 +552,59 @@ async function executeSingleTask(taskName, context, state, circuitBreakers) {
 // Map tasks to node pool tiers for priority ordering
 const TASK_POOL_MAP = {
   // Hot pool: user-facing, core pipeline tasks (critical latency)
+  resolve_channel_and_identity: "hot",
+  route_to_pipeline_branch: "hot",
   route_to_agents: "hot",
   monitor_agent_execution: "hot",
   collect_agent_results: "hot",
   compute_readiness_score: "hot",
+  mc_plan_selection: "hot",
+  mc_replan_failed_tasks: "hot",
   // Warm pool: important background tasks
+  sync_cross_device_context: "warm",
+  determine_launch_mode: "warm",
   generate_task_graph: "warm",
   assign_priorities: "warm",
   validate_governance: "warm",
   evaluate_failures: "warm",
+  apply_compensation: "warm",
   persist_results: "warm",
   log_run_config_hash: "warm",
-  // Cold pool: async ingestion, analytics
+  record_run_critique: "warm",
+  diagnose_bottlenecks: "warm",
+  check_all_connection_health: "warm",
+  identify_improvement_candidates: "warm",
+  run_meta_analysis: "warm",
+  apply_pattern_improvements: "warm",
+  adjust_mc_strategy_weights: "warm",
+  adjust_worker_pool_concurrency: "warm",
+  update_channel_optimizations: "warm",
+  record_pipeline_improvements: "warm",
+  feed_stage_timing_to_mc: "warm",
+  feed_task_timing_to_patterns: "warm",
+  publish_metrics_to_channels: "warm",
+  check_cross_channel_seamlessness: "warm",
+  propose_micro_upgrades: "warm",
+  archive_run_to_history: "warm",
+  sync_registry_and_docs: "warm",
+  validate_notebook_integrity: "warm",
+  check_doc_owner_freshness: "warm",
+  // Cold pool: async ingestion, analytics, mining
   ingest_news_feeds: "cold",
   ingest_external_apis: "cold",
   ingest_repo_changes: "cold",
   ingest_health_metrics: "cold",
+  ingest_channel_events: "cold",
+  ingest_connection_health: "cold",
+  ingest_public_domain_patterns: "cold",
   estimate_costs: "cold",
-  apply_compensation: "cold",
+  check_public_domain_inspiration: "cold",
   retry_recoverable: "cold",
   escalate_unrecoverable: "cold",
   update_concept_index: "cold",
   send_checkpoint_email: "cold",
+  mine_public_domain_best_practices: "cold",
+  invalidate_stale_caches: "cold",
 };
 
 const POOL_PRIORITY = { hot: 0, warm: 1, cold: 2 };
@@ -586,6 +622,7 @@ function findBreakerForTask(taskName, circuitBreakers) {
   const TASK_BREAKER_MAP = {
     ingest_news_feeds: "external-news-api",
     ingest_external_apis: "external-news-api",
+    ingest_public_domain_patterns: "external-news-api",
     generate_task_graph: "llm-provider",
     assign_priorities: "llm-provider",
     estimate_costs: "llm-provider",
@@ -596,6 +633,12 @@ function findBreakerForTask(taskName, circuitBreakers) {
     evaluate_failures: "llm-provider",
     compute_readiness_score: "llm-provider",
     log_run_config_hash: "llm-provider",
+    mc_plan_selection: "llm-provider",
+    mc_replan_failed_tasks: "llm-provider",
+    check_public_domain_inspiration: "external-news-api",
+    mine_public_domain_best_practices: "external-news-api",
+    diagnose_bottlenecks: "llm-provider",
+    run_meta_analysis: "llm-provider",
   };
   const endpoint = TASK_BREAKER_MAP[taskName];
   return endpoint ? circuitBreakers.get(endpoint) || null : null;
@@ -663,6 +706,22 @@ class HCFullPipeline extends EventEmitter {
     this.state = null;
     this.circuitBreakers = new Map();
     this.history = [];
+    // External system references (set via bind())
+    this._mcScheduler = null;
+    this._patternEngine = null;
+    this._selfCritique = null;
+    this._stageTimings = [];
+  }
+
+  /**
+   * Bind external systems so the pipeline can feed them data.
+   * Call this from heady-manager.js after all systems are loaded.
+   * @param {Object} systems - { mcScheduler, patternEngine, selfCritique }
+   */
+  bind(systems = {}) {
+    if (systems.mcScheduler) this._mcScheduler = systems.mcScheduler;
+    if (systems.patternEngine) this._patternEngine = systems.patternEngine;
+    if (systems.selfCritique) this._selfCritique = systems.selfCritique;
   }
 
   load() {
@@ -774,8 +833,109 @@ class HCFullPipeline extends EventEmitter {
       this.history = this.history.slice(-50);
     }
 
+    // ── Post-run feedback loop ──────────────────────────────────────────
+    await this._postRunFeedback();
+
     this.emit("run:end", { runId: this.state.runId, status: this.state.status, metrics: this.state.metrics });
     return this.state;
+  }
+
+  /**
+   * Post-run feedback: feed timing data to MC scheduler and pattern engine,
+   * run self-critique on the completed run, record improvements.
+   */
+  async _postRunFeedback() {
+    if (!this.state) return;
+    const stageData = this.state.stages || {};
+
+    // 1. Feed per-task latency into MC scheduler
+    if (this._mcScheduler) {
+      for (const [stageId, stage] of Object.entries(stageData)) {
+        const tasks = stage.tasks || {};
+        for (const [taskName, taskResult] of Object.entries(tasks)) {
+          if (taskResult.durationMs != null && taskResult.durationMs > 0) {
+            try {
+              this._mcScheduler.recordResult(
+                taskName,
+                "balanced", // default strategy attribution for pipeline tasks
+                taskResult.durationMs,
+                taskResult.status === "completed",
+                taskResult.status === "completed" ? 85 : 40
+              );
+            } catch (_) { /* non-fatal */ }
+          }
+        }
+      }
+    }
+
+    // 2. Feed stage timing into pattern engine
+    if (this._patternEngine) {
+      for (const [stageId, stage] of Object.entries(stageData)) {
+        if (stage.startedAt && stage.completedAt) {
+          const stageMs = new Date(stage.completedAt) - new Date(stage.startedAt);
+          try {
+            this._patternEngine.observeLatency(`pipeline:${stageId}`, stageMs, {
+              tags: ["pipeline", "stage_timing", stageId],
+            });
+          } catch (_) { /* non-fatal */ }
+        }
+        // Per-task observations
+        const tasks = stage.tasks || {};
+        for (const [taskName, taskResult] of Object.entries(tasks)) {
+          if (taskResult.status === "failed") {
+            try {
+              this._patternEngine.observeError(`pipeline:${taskName}`, "task_failed", {
+                tags: ["pipeline", "task_failure", taskName],
+              });
+            } catch (_) { /* non-fatal */ }
+          }
+        }
+      }
+    }
+
+    // 3. Self-critique the run
+    if (this._selfCritique) {
+      try {
+        const weaknesses = [];
+        const improvements = [];
+        const m = this.state.metrics;
+
+        if (m.errorRate > 0.05) weaknesses.push(`Error rate ${(m.errorRate * 100).toFixed(1)}% exceeds 5% target`);
+        if (m.elapsedMs > 30000) weaknesses.push(`Total pipeline elapsed ${m.elapsedMs}ms exceeds 30s target`);
+        if (m.cachedTasks === 0 && m.completedTasks > 0) weaknesses.push("No tasks served from cache — cold run");
+        if (m.failedTasks > 0) weaknesses.push(`${m.failedTasks} task(s) failed`);
+
+        // Check for slow stages
+        for (const [stageId, stage] of Object.entries(stageData)) {
+          if (stage.startedAt && stage.completedAt) {
+            const stageMs = new Date(stage.completedAt) - new Date(stage.startedAt);
+            if (stageMs > 10000) weaknesses.push(`Stage '${stageId}' took ${stageMs}ms (>10s)`);
+          }
+        }
+
+        if (weaknesses.length < 3) weaknesses.push("Pipeline may have undetected bottlenecks — add more instrumentation");
+
+        this._selfCritique.recordCritique({
+          context: `pipeline_run:${this.state.runId}`,
+          weaknesses,
+          severity: m.errorRate > 0.1 ? "high" : m.errorRate > 0.05 ? "medium" : "low",
+          suggestedImprovements: [
+            m.cachedTasks === 0 ? "Seed task cache with warm-up run" : null,
+            m.failedTasks > 0 ? "Add MC re-planning for failed tasks on next run" : null,
+            m.elapsedMs > 30000 ? "Increase parallelism or switch to fast_parallel strategy" : null,
+          ].filter(Boolean),
+        });
+
+        // Record the run as an improvement data point
+        this._selfCritique.recordImprovement({
+          description: `Pipeline run ${this.state.runId} completed`,
+          type: "pipeline_execution",
+          before: `${m.totalTasks} tasks queued`,
+          after: `${m.completedTasks} completed, ${m.failedTasks} failed, ${m.cachedTasks} cached in ${m.elapsedMs}ms`,
+          status: this.state.status === RunStatus.COMPLETED ? "applied" : "needs_review",
+        });
+      } catch (_) { /* non-fatal */ }
+    }
   }
 
   getState() {

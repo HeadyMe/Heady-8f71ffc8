@@ -111,23 +111,35 @@ function collectRAM() {
 function collectDisk() {
   try {
     if (process.platform === "win32") {
-      const out = execSync('wmic logicaldisk where "DeviceID=\'C:\'" get FreeSpace,Size /format:csv', {
-        timeout: 5000, encoding: "utf-8",
-      });
-      const lines = out.trim().split("\n").filter(l => l.trim() && !l.startsWith("Node"));
-      if (lines.length > 0) {
-        const parts = lines[lines.length - 1].split(",");
-        const free = parseInt(parts[1], 10);
-        const total = parseInt(parts[2], 10);
-        if (total > 0) {
-          const usedPercent = Math.round(((total - free) / total) * 100);
-          return {
-            currentPercent: usedPercent,
-            absoluteValue: Math.round((total - free) / (1024 * 1024 * 1024)),
-            capacity: Math.round(total / (1024 * 1024 * 1024)),
-            unit: "GB",
-          };
-        }
+      // PowerShell fallback (wmic is deprecated on modern Windows)
+      const out = execSync(
+        'powershell -NoProfile -Command "Get-PSDrive C | Select-Object Used,Free | ConvertTo-Json"',
+        { timeout: 8000, encoding: "utf-8" }
+      );
+      const info = JSON.parse(out.trim());
+      const used = info.Used || 0;
+      const free = info.Free || 0;
+      const total = used + free;
+      if (total > 0) {
+        return {
+          currentPercent: Math.round((used / total) * 100),
+          absoluteValue: Math.round(used / (1024 * 1024 * 1024)),
+          capacity: Math.round(total / (1024 * 1024 * 1024)),
+          unit: "GB",
+        };
+      }
+    } else {
+      const out = execSync("df -k / | tail -1", { timeout: 5000, encoding: "utf-8" });
+      const parts = out.trim().split(/\s+/);
+      const total = parseInt(parts[1], 10) * 1024;
+      const used = parseInt(parts[2], 10) * 1024;
+      if (total > 0) {
+        return {
+          currentPercent: Math.round((used / total) * 100),
+          absoluteValue: Math.round(used / (1024 * 1024 * 1024)),
+          capacity: Math.round(total / (1024 * 1024 * 1024)),
+          unit: "GB",
+        };
       }
     }
   } catch (_) { /* fall through */ }

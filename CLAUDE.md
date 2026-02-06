@@ -133,7 +133,20 @@ At each checkpoint, you MUST:
 3. **Re-evaluate health** — bottlenecks, errors, spend vs budget
 4. **Check concept alignment** — which patterns active, suggest missing
 5. **Apply approved patterns** — gradual enablement at boundaries
-6. **Report** — comprehensive status with concept usage + config hashes
+6. **Sync registry entries** — update HeadyRegistry with new versions, endpoints, statuses
+7. **Sync documentation** — update all docs that reference changed APIs/schemas/configs
+8. **Validate notebooks** — ensure Colab notebooks still parse and reference correct APIs
+9. **Check doc ownership freshness** — flag overdue reviews per `docs/DOC_OWNERS.yaml`
+10. **Report** — comprehensive status with concept usage + config hashes
+
+> Full protocol: `docs/CHECKPOINT_PROTOCOL.md`
+> Automation: `scripts/checkpoint-sync.ps1`
+> Workflow: `.windsurf/workflows/checkpoint-sync.md`
+
+### Standing Rule
+Outdated documentation is treated as a defect. When a mismatch between docs
+and behavior is detected, create an incident task and prevent that class of
+drift in future.
 
 ## COMMANDS
 
@@ -182,6 +195,16 @@ curl localhost:3300/api/checkpoint/records                                    # 
 curl localhost:3300/api/subsystems                                           # All subsystem status
 curl localhost:3300/api/agents/claude-code/status                            # Claude Code agent status
 
+# Registry API
+curl localhost:3300/api/registry                             # Full registry catalog
+curl localhost:3300/api/registry/component/heady-manager      # Lookup component
+curl localhost:3300/api/registry/environments                 # List environments
+curl localhost:3300/api/registry/docs                         # List registered docs
+curl localhost:3300/api/registry/notebooks                    # List registered notebooks
+curl localhost:3300/api/registry/patterns                     # List patterns
+curl localhost:3300/api/registry/workflows                    # List workflows
+curl localhost:3300/api/registry/ai-nodes                     # List AI nodes
+
 # System status
 curl localhost:3300/api/health                    # Health check
 curl localhost:3300/api/system/status             # Full system status
@@ -192,6 +215,12 @@ curl -X POST localhost:3300/api/system/production # Activate production mode
 .\commit_and_build.ps1             # Local build cycle
 .\nexus_deploy.ps1                 # Push to all remotes
 .\heady_sync.ps1                   # Multi-remote sync
+
+# Checkpoint Sync
+.\scripts\checkpoint-sync.ps1                    # Full checkpoint sync
+.\scripts\checkpoint-sync.ps1 -Mode check        # Read-only drift detection
+.\scripts\checkpoint-sync.ps1 -Mode fix          # Auto-fix issues
+.\scripts\checkpoint-sync.ps1 -Mode report       # Generate report only
 
 # Health check script
 .\scripts\ops\node-health-check.ps1              # NHC-style health check
@@ -207,7 +236,21 @@ curl -X POST localhost:3300/api/system/production # Activate production mode
 | `hcautobuild.ps1` | Automated build pipeline |
 | `heady_protocol.ps1` | Protocol enforcement |
 | `scripts/auto-checkpoint.ps1` | Automated checkpoint saves |
+| `scripts/checkpoint-sync.ps1` | Checkpoint Protocol sync (all files) |
 | `scripts/hc.ps1` | HC CLI tool |
+
+## KEY DOCUMENTATION
+
+| Path | Purpose |
+|------|---------|
+| `docs/CHECKPOINT_PROTOCOL.md` | Master protocol for keeping all files in sync at every checkpoint |
+| `docs/DOC_OWNERS.yaml` | Document ownership, review dates, and freshness tracking |
+| `docs/notion-quick-start.md` | Notion Quick Start notebook template (exportable) |
+| `docs/notion-project-notebook.md` | Notion Project Notebook template (exportable) |
+| `docs/heady-services-manual.md` | Comprehensive services manual |
+| `heady-registry.json` | HeadyRegistry — central catalog of all components, workflows, environments, docs, notebooks |
+| `configs/notebook-ci.yaml` | Notebook CI validation configuration |
+| `notebooks/` | Colab notebooks (quick-start, tutorials, examples) |
 
 ## DETERMINISM RULE
 

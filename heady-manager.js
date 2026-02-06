@@ -66,12 +66,25 @@ app.get("/api/pulse", (req, res) => {
     ts: new Date().toISOString(),
     status: "active",
     endpoints: [
-      "/api/health", "/api/pulse", "/api/registry", "/api/nodes",
-      "/api/system/status", "/api/pipeline/*",
+      "/api/health", "/api/pulse", "/api/registry", "/api/registry/component/:id",
+      "/api/registry/environments", "/api/registry/docs", "/api/registry/notebooks",
+      "/api/registry/patterns", "/api/registry/workflows", "/api/registry/ai-nodes",
+      "/api/nodes", "/api/system/status", "/api/pipeline/*",
       "/api/ide/spec", "/api/ide/agents",
       "/api/playbook", "/api/agentic", "/api/activation", "/api/public-domain",
       "/api/resources/health", "/api/resources/snapshot", "/api/resources/events",
+      "/api/resources/diagnose", "/api/resources/quick-wins", "/api/resources/system-profile",
+      "/api/scheduler/status", "/api/scheduler/queues", "/api/scheduler/history",
       "/api/stories", "/api/stories/recent", "/api/stories/summary",
+      "/api/monte-carlo/plan", "/api/monte-carlo/result", "/api/monte-carlo/metrics",
+      "/api/monte-carlo/status", "/api/monte-carlo/drift", "/api/monte-carlo/simulate",
+      "/api/monte-carlo/speed-mode",
+      "/api/patterns", "/api/patterns/summary", "/api/patterns/recent",
+      "/api/patterns/bottlenecks", "/api/patterns/improvements",
+      "/api/self/status", "/api/self/knowledge", "/api/self/critique", "/api/self/critiques",
+      "/api/self/improvement", "/api/self/improvements", "/api/self/diagnose", "/api/self/diagnostics",
+      "/api/self/connection-health", "/api/self/connections", "/api/self/meta-analysis",
+      "/api/pricing/tiers", "/api/pricing/fair-access", "/api/pricing/metrics",
     ],
   });
 });
@@ -93,6 +106,50 @@ app.get("/api/registry", (req, res) => {
   const registry = readJsonSafe(registryPath);
   if (!registry) return res.status(404).json({ error: "Registry not found" });
   res.json(registry);
+});
+
+app.get("/api/registry/component/:id", (req, res) => {
+  const registry = readJsonSafe(path.join(__dirname, "heady-registry.json"));
+  if (!registry) return res.status(404).json({ error: "Registry not found" });
+  const comp = (registry.components || []).find(c => c.id === req.params.id);
+  if (!comp) return res.status(404).json({ error: `Component '${req.params.id}' not found` });
+  res.json(comp);
+});
+
+app.get("/api/registry/environments", (req, res) => {
+  const registry = readJsonSafe(path.join(__dirname, "heady-registry.json"));
+  if (!registry) return res.status(404).json({ error: "Registry not found" });
+  res.json({ environments: registry.environments || [], ts: new Date().toISOString() });
+});
+
+app.get("/api/registry/docs", (req, res) => {
+  const registry = readJsonSafe(path.join(__dirname, "heady-registry.json"));
+  if (!registry) return res.status(404).json({ error: "Registry not found" });
+  res.json({ docs: registry.docs || [], ts: new Date().toISOString() });
+});
+
+app.get("/api/registry/notebooks", (req, res) => {
+  const registry = readJsonSafe(path.join(__dirname, "heady-registry.json"));
+  if (!registry) return res.status(404).json({ error: "Registry not found" });
+  res.json({ notebooks: registry.notebooks || [], ts: new Date().toISOString() });
+});
+
+app.get("/api/registry/patterns", (req, res) => {
+  const registry = readJsonSafe(path.join(__dirname, "heady-registry.json"));
+  if (!registry) return res.status(404).json({ error: "Registry not found" });
+  res.json({ patterns: registry.patterns || [], ts: new Date().toISOString() });
+});
+
+app.get("/api/registry/workflows", (req, res) => {
+  const registry = readJsonSafe(path.join(__dirname, "heady-registry.json"));
+  if (!registry) return res.status(404).json({ error: "Registry not found" });
+  res.json({ workflows: registry.workflows || [], ts: new Date().toISOString() });
+});
+
+app.get("/api/registry/ai-nodes", (req, res) => {
+  const registry = readJsonSafe(path.join(__dirname, "heady-registry.json"));
+  if (!registry) return res.status(404).json({ error: "Registry not found" });
+  res.json({ aiNodes: registry.aiNodes || [], ts: new Date().toISOString() });
 });
 
 // ─── Node Management ────────────────────────────────────────────────
@@ -351,6 +408,135 @@ try {
   });
 }
 
+// ─── Task Scheduler ──────────────────────────────────────────────────
+let taskScheduler = null;
+try {
+  const { HCTaskScheduler, registerSchedulerRoutes } = require("./src/hc_task_scheduler");
+  taskScheduler = new HCTaskScheduler();
+  registerSchedulerRoutes(app, taskScheduler);
+
+  // Wire resource manager safe mode into scheduler
+  if (resourceManager) {
+    resourceManager.on("mitigation:safe_mode_activated", () => {
+      taskScheduler.enterSafeMode();
+    });
+    resourceManager.on("mitigation:batch_paused", () => {
+      taskScheduler.adjustConcurrency("batch", 1);
+    });
+    resourceManager.on("mitigation:concurrency_lowered", () => {
+      taskScheduler.adjustConcurrency("batch", 1);
+      taskScheduler.adjustConcurrency("training", 0);
+    });
+  }
+
+  console.log("  ∞ Task Scheduler: LOADED");
+} catch (err) {
+  console.warn(`  ⚠ Task Scheduler not loaded: ${err.message}`);
+}
+
+// ─── Resource Diagnostics ────────────────────────────────────────────
+let resourceDiagnostics = null;
+try {
+  const { HCResourceDiagnostics, registerDiagnosticRoutes } = require("./src/hc_resource_diagnostics");
+  resourceDiagnostics = new HCResourceDiagnostics({
+    resourceManager,
+    taskScheduler,
+  });
+  registerDiagnosticRoutes(app, resourceDiagnostics);
+  console.log("  ∞ Resource Diagnostics: LOADED");
+} catch (err) {
+  console.warn(`  ⚠ Resource Diagnostics not loaded: ${err.message}`);
+}
+
+// ─── Monte Carlo Plan Scheduler ──────────────────────────────────────
+let mcPlanScheduler = null;
+let mcGlobal = null;
+try {
+  const { mcPlanScheduler: _mcPS, mcGlobal: _mcG, registerMonteCarloRoutes } = require("./src/hc_monte_carlo");
+  mcPlanScheduler = _mcPS;
+  mcGlobal = _mcG;
+  registerMonteCarloRoutes(app, mcPlanScheduler, mcGlobal);
+
+  // Wire MC plan scheduler drift alerts into pattern engine (loaded below)
+  mcPlanScheduler.on("drift:detected", (alert) => {
+    console.warn(`  ⚠ MC Drift: ${alert.taskType}/${alert.strategyId} at ${alert.medianMs}ms (target ${alert.targetMs}ms)`);
+  });
+
+  // Bind MC global to pipeline if available
+  if (pipeline) {
+    mcGlobal.bind({ pipeline, registry: loadRegistry });
+  }
+
+  // Start background MC cycles
+  mcGlobal.startAutoRun();
+
+  // Default to speed_priority mode — speed is a first-class objective
+  mcPlanScheduler.setSpeedMode("on");
+
+  console.log("  ∞ Monte Carlo Plan Scheduler: LOADED (speed_priority mode)");
+  console.log("  ∞ Monte Carlo Global: AUTO-RUN started (60s cycles)");
+} catch (err) {
+  console.warn(`  ⚠ Monte Carlo not loaded: ${err.message}`);
+}
+
+// ─── Pattern Recognition Engine ──────────────────────────────────────
+let patternEngine = null;
+try {
+  const { patternEngine: _pe, registerPatternRoutes } = require("./src/hc_pattern_engine");
+  patternEngine = _pe;
+  registerPatternRoutes(app, patternEngine);
+
+  // Wire MC drift alerts into pattern engine
+  if (mcPlanScheduler) {
+    mcPlanScheduler.on("drift:detected", (alert) => {
+      patternEngine.observeLatency(`mc_drift:${alert.taskType}`, alert.medianMs, {
+        strategyId: alert.strategyId, targetMs: alert.targetMs,
+        tags: ["drift", "monte_carlo"],
+      });
+    });
+    mcPlanScheduler.on("result:recorded", (data) => {
+      patternEngine.observeLatency(`task:${data.taskType}`, data.actualLatencyMs, {
+        strategyId: data.strategyId, reward: data.reward,
+        tags: ["monte_carlo", "execution"],
+      });
+    });
+  }
+
+  // Wire task scheduler into pattern engine
+  if (taskScheduler) {
+    taskScheduler.on("task:completed", (task) => {
+      const execMs = (task.metrics.completedAt || 0) - (task.metrics.startedAt || 0);
+      patternEngine.observeSuccess(`scheduler:${task.type}`, execMs, {
+        tier: task.resourceTier, taskClass: task.taskClass,
+        tags: ["scheduler"],
+      });
+    });
+    taskScheduler.on("task:failed", (task) => {
+      patternEngine.observeError(`scheduler:${task.type}`, task.error || "unknown", {
+        tier: task.resourceTier, tags: ["scheduler", "failure"],
+      });
+    });
+  }
+
+  // Wire resource manager into pattern engine
+  if (resourceManager) {
+    resourceManager.on("resource_event", (event) => {
+      if (event.severity === "WARN_HARD" || event.severity === "CRITICAL") {
+        patternEngine.observe("reliability", `resource:${event.resourceType}`, event.currentUsagePercent, {
+          severity: event.severity, tags: ["resource", event.resourceType],
+        });
+      }
+    });
+  }
+
+  // Start continuous pattern analysis
+  patternEngine.start();
+
+  console.log("  ∞ Pattern Engine: LOADED (30s analysis cycles)");
+} catch (err) {
+  console.warn(`  ⚠ Pattern Engine not loaded: ${err.message}`);
+}
+
 // ─── Story Driver ────────────────────────────────────────────────────
 let storyDriver = null;
 try {
@@ -375,9 +561,84 @@ try {
     });
   }
 
+  // Wire pattern engine events into story driver
+  if (patternEngine) {
+    patternEngine.on("pattern:converged", (data) => {
+      storyDriver.ingestSystemEvent({
+        type: "PATTERN_CONVERGED",
+        refs: { patternId: data.id, name: data.name },
+        source: "pattern_engine",
+      });
+    });
+    patternEngine.on("anomaly:error_burst", (data) => {
+      storyDriver.ingestSystemEvent({
+        type: "ERROR_BURST_DETECTED",
+        refs: { patternId: data.patternId, name: data.name, count: data.count },
+        source: "pattern_engine",
+      });
+    });
+    patternEngine.on("anomaly:correlated_slowdown", (data) => {
+      storyDriver.ingestSystemEvent({
+        type: "CORRELATED_SLOWDOWN",
+        refs: { patterns: data.patterns, count: data.count },
+        source: "pattern_engine",
+      });
+    });
+  }
+
   console.log("  ∞ Story Driver: LOADED");
 } catch (err) {
   console.warn(`  ⚠ Story Driver not loaded: ${err.message}`);
+}
+
+// ─── Self-Critique & Optimization Engine ─────────────────────────────
+let selfCritiqueEngine = null;
+try {
+  const { selfCritique, registerSelfCritiqueRoutes } = require("./src/hc_self_critique");
+  selfCritiqueEngine = selfCritique;
+  registerSelfCritiqueRoutes(app, selfCritiqueEngine);
+
+  // Wire MC drift into self-critique as bottleneck diagnostic data
+  if (mcPlanScheduler) {
+    mcPlanScheduler.on("drift:detected", (alert) => {
+      selfCritiqueEngine.recordCritique({
+        context: `mc_drift:${alert.taskType}`,
+        weaknesses: [`Latency drift on ${alert.taskType}: ${alert.medianMs}ms vs ${alert.targetMs}ms target`],
+        severity: alert.medianMs > alert.targetMs * 2 ? "critical" : "high",
+        suggestedImprovements: ["Run MC re-optimization", "Check warm pool availability"],
+      });
+    });
+  }
+
+  // Wire pattern stagnation into self-critique
+  if (patternEngine) {
+    patternEngine.on("improvement:created", (task) => {
+      selfCritiqueEngine.recordImprovement({
+        description: task.title || "Pattern improvement task",
+        type: "routing_change",
+        status: "proposed",
+      });
+    });
+  }
+
+  console.log("  ∞ Self-Critique Engine: LOADED");
+  console.log("    → Endpoints: /api/self/*, /api/pricing/*");
+} catch (err) {
+  console.warn(`  ⚠ Self-Critique Engine not loaded: ${err.message}`);
+}
+
+// ─── Bind Pipeline to External Systems ──────────────────────────────
+// Connect HCFullPipeline to MC scheduler, pattern engine, and self-critique
+// so post-run feedback loops (timing → MC, observations → patterns, critique → improvements) work.
+try {
+  pipeline.bind({
+    mcScheduler: mcPlanScheduler || null,
+    patternEngine: patternEngine || null,
+    selfCritique: selfCritiqueEngine || null,
+  });
+  console.log("  ∞ Pipeline bound to MC + Patterns + Self-Critique");
+} catch (err) {
+  console.warn(`  ⚠ Pipeline bind failed: ${err.message}`);
 }
 
 // ─── HeadyBuddy API ─────────────────────────────────────────────────
@@ -412,8 +673,57 @@ app.post("/api/buddy/chat", (req, res) => {
   } else if (lowerMsg.includes("pipeline") || lowerMsg.includes("hcfull")) {
     const contState = continuousPipeline.running ? `running (cycle ${continuousPipeline.cycleCount})` : "stopped";
     reply = `Pipeline continuous mode: ${contState}. ${activeNodes} nodes active. Would you like me to start a pipeline run or check the orchestrator dashboard?`;
-  } else if (lowerMsg.includes("slow") || lowerMsg.includes("taking so long") || lowerMsg.includes("explain") && lowerMsg.includes("slowdown")) {
-    if (resourceManager) {
+  } else if (lowerMsg.includes("diagnos") || lowerMsg.includes("why slow") || lowerMsg.includes("bottleneck") || lowerMsg.includes("fix resource")) {
+    if (resourceDiagnostics) {
+      const diag = resourceDiagnostics.diagnose();
+      const topFindings = diag.findings.slice(0, 3).map(f => `• ${f.severity.toUpperCase()}: ${f.title}`).join("\n");
+      const winsText = diag.quickWins.length > 0
+        ? `\n\nQuick wins:\n${diag.quickWins.map(w => `→ ${w.title}`).join("\n")}`
+        : "";
+      reply = `Diagnostic scan complete — ${diag.totalFindings} findings (${diag.critical} critical, ${diag.high} high).\n\n${topFindings}${winsText}\n\nExpand to Resources tab for full report or say "apply quick wins".`;
+    } else {
+      reply = "Resource Diagnostics module not loaded. Check the Resources tab for basic health data.";
+    }
+  } else if (lowerMsg.includes("apply quick win") || lowerMsg.includes("fix it") || lowerMsg.includes("apply fix")) {
+    if (resourceDiagnostics) {
+      const diag = resourceDiagnostics.lastDiagnosis || resourceDiagnostics.diagnose();
+      const applied = [];
+      for (const win of diag.quickWins) {
+        if (win.configChange && taskScheduler) {
+          const { endpoint, body } = win.configChange;
+          if (endpoint.includes("concurrency") && body.taskClass && body.limit != null) {
+            taskScheduler.adjustConcurrency(body.taskClass, body.limit);
+            applied.push(win.title);
+          } else if (endpoint.includes("safe-mode") && body.enabled) {
+            taskScheduler.enterSafeMode();
+            applied.push(win.title);
+          }
+        }
+      }
+      reply = applied.length > 0
+        ? `Applied ${applied.length} quick wins:\n${applied.map(a => `✓ ${a}`).join("\n")}\n\nMonitoring for improvement.`
+        : "No auto-applicable quick wins right now. Check the Resources tab for manual options.";
+    } else {
+      reply = "Diagnostics module not available.";
+    }
+  } else if (lowerMsg.includes("scheduler") || lowerMsg.includes("queue") || lowerMsg.includes("task")) {
+    if (taskScheduler) {
+      const st = taskScheduler.getStatus();
+      const totalQ = st.queues.interactive + st.queues.batch + st.queues.training;
+      const totalR = st.running.interactive + st.running.batch + st.running.training;
+      reply = `Scheduler: ${totalQ} queued, ${totalR} running. Completed: ${st.stats.totalCompleted}. Avg wait: ${st.stats.avgWaitMs}ms, avg exec: ${st.stats.avgExecMs}ms. Safe mode: ${st.safeModeActive ? "ON" : "off"}. ${st.paused ? "⏸ PAUSED" : "▶ Active"}.`;
+    } else {
+      reply = "Task Scheduler not loaded. Submit tasks via /api/scheduler/submit.";
+    }
+  } else if (lowerMsg.includes("slow") || lowerMsg.includes("taking so long") || (lowerMsg.includes("explain") && lowerMsg.includes("slowdown"))) {
+    if (resourceDiagnostics) {
+      const diag = resourceDiagnostics.diagnose();
+      const snap = resourceManager ? resourceManager.getSnapshot() : {};
+      const cpuPct = snap.cpu?.currentPercent || 0;
+      const ramPct = snap.ram?.currentPercent || 0;
+      const topIssue = diag.findings[0];
+      reply = `CPU: ${cpuPct}%, RAM: ${ramPct}%. ${diag.totalFindings} diagnostic findings. ${topIssue ? `Top issue: ${topIssue.title} (${topIssue.severity}).` : "No critical issues."} Say "diagnose" for full report or "apply quick wins" for fast fixes.`;
+    } else if (resourceManager) {
       const snap = resourceManager.getSnapshot();
       const events = resourceManager.getRecentEvents(5);
       const cpuPct = snap.cpu?.currentPercent || 0;
@@ -422,16 +732,17 @@ app.post("/api/buddy/chat", (req, res) => {
         ? events[events.length - 1].contributors.slice(0, 3).map(c => `${c.description} (${c.ramMB || 0} MB)`).join(", ")
         : "no major contributors detected";
       const severity = cpuPct >= 90 || ramPct >= 85 ? "CRITICAL" : cpuPct >= 75 || ramPct >= 70 ? "CONSTRAINED" : "HEALTHY";
-      reply = `Resource status: ${severity}. CPU: ${cpuPct}%, RAM: ${ramPct}%. Top contributors: ${contributors}. ${snap.safeMode ? "Safe mode is ACTIVE." : ""} Check the Resources tab in Expanded View for details and quick actions.`;
+      reply = `Resource status: ${severity}. CPU: ${cpuPct}%, RAM: ${ramPct}%. Top contributors: ${contributors}. ${snap.safeMode ? "Safe mode is ACTIVE." : ""} Check the Resources tab for details.`;
     } else {
-      reply = `I can see system memory at ${Math.round(process.memoryUsage().heapUsed / 1048576)}MB heap. For detailed resource analysis, the Resource Manager needs to be running. Check the Resources tab for more.`;
+      reply = `System memory at ${Math.round(process.memoryUsage().heapUsed / 1048576)}MB heap. For detailed analysis, the Resource Manager needs to be running.`;
     }
   } else if (lowerMsg.includes("resource") || lowerMsg.includes("gpu") || lowerMsg.includes("tier")) {
     if (resourceManager) {
       const snap = resourceManager.getSnapshot();
-      reply = `Resource overview: CPU ${snap.cpu?.currentPercent || 0}%, RAM ${snap.ram?.currentPercent || 0}%${snap.gpu ? `, GPU ${snap.gpu.compute?.currentPercent || 0}%` : ""}. ${activeNodes}/${nodeCount} nodes active. ${snap.safeMode ? "⚠ Safe mode active." : ""} Expand to Resources tab for full details.`;
+      const diskInfo = snap.disk && snap.disk.capacity > 0 ? `, Disk ${snap.disk.currentPercent}%` : "";
+      reply = `Resource overview: CPU ${snap.cpu?.currentPercent || 0}%, RAM ${snap.ram?.currentPercent || 0}%${diskInfo}${snap.gpu ? `, GPU ${snap.gpu.compute?.currentPercent || 0}%` : ""}. ${activeNodes}/${nodeCount} nodes active. ${snap.safeMode ? "⚠ Safe mode active." : ""} Say "diagnose" for deep analysis.`;
     } else {
-      reply = `Resource overview: ${activeNodes}/${nodeCount} nodes active. Memory: ${Math.round(process.memoryUsage().heapUsed / 1048576)}MB heap. Check the Orchestrator tab for detailed tier usage.`;
+      reply = `Resource overview: ${activeNodes}/${nodeCount} nodes active. Memory: ${Math.round(process.memoryUsage().heapUsed / 1048576)}MB heap. Check the Orchestrator tab for details.`;
     }
   } else if (lowerMsg.includes("story") || lowerMsg.includes("what changed") || lowerMsg.includes("narrative")) {
     if (storyDriver) {

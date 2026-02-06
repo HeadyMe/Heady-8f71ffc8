@@ -40,6 +40,10 @@ HeadyAcademy/Content_Forge/Visualizations/
 pipeline-output/
 .heady_cache/
 
+# Personal notebooks (experimental, not tracked)
+notebooks/personal/*
+!notebooks/personal/.gitkeep
+
 # Secrets
 .heady/memory.db
 .heady/*.db
