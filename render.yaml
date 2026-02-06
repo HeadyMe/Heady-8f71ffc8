@@ -2,7 +2,7 @@ services:
   - type: web
     name: heady-manager
     runtime: node
-    buildCommand: npm install && npm run build
+    buildCommand: npm install
     startCommand: node heady-manager.js
     envVars:
       - key: PORT
@@ -13,9 +13,25 @@ services:
         value: "3.0.0"
       - key: ENABLE_CODEMAP
         value: "true"
+      - key: JULES_ENABLED
+        value: "true"
+      - key: OBSERVER_ENABLED
+        value: "true"
+      - key: BUILDER_ENABLED
+        value: "true"
+      - key: ATLAS_ENABLED
+        value: "true"
       - key: DATABASE_URL
         fromSecret: DATABASE_URL
       - key: HEADY_API_KEY
         fromSecret: HEADY_API_KEY
       - key: ADMIN_TOKEN
         fromSecret: ADMIN_TOKEN
+      - key: STRIPE_SECRET_KEY
+        fromSecret: STRIPE_SECRET_KEY
+      - key: STRIPE_WEBHOOK_SECRET
+        fromSecret: STRIPE_WEBHOOK_SECRET
+      - key: STRIPE_PRICE_STARTER
+        fromSecret: STRIPE_PRICE_STARTER
+      - key: STRIPE_PRICE_PRO
+        fromSecret: STRIPE_PRICE_PRO
