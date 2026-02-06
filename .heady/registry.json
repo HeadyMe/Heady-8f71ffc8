@@ -155,6 +155,36 @@
       "file_path": ".windsurf/workflows/autobuild.md",
       "slash_command": "/autobuild",
       "status": "active"
+    },
+    "heady-auto-ide": {
+      "name": "heady-auto-ide",
+      "description": "HeadyAutoIDE - AI-native orchestration cockpit specification",
+      "file_path": "configs/heady-auto-ide.yaml",
+      "status": "active"
+    },
+    "build-playbook": {
+      "name": "build-playbook",
+      "description": "Build Playbook - Apps correct and robust the first time",
+      "file_path": "configs/build-playbook.yaml",
+      "status": "active"
+    },
+    "agentic-coding": {
+      "name": "agentic-coding",
+      "description": "Agentic Coding - Techniques for co-working with AI agents",
+      "file_path": "configs/agentic-coding.yaml",
+      "status": "active"
+    },
+    "public-domain-integration": {
+      "name": "public-domain-integration",
+      "description": "Public Domain Integration - Discover and integrate superior techniques",
+      "file_path": "configs/public-domain-integration.yaml",
+      "status": "active"
+    },
+    "activation-manifest": {
+      "name": "activation-manifest",
+      "description": "Activation Manifest - System ready to build from scratch",
+      "file_path": "configs/activation-manifest.yaml",
+      "status": "active"
     }
   },
   "skills": {
@@ -162,6 +192,24 @@
       "name": "hc",
       "description": "Heady Conductor orchestration",
       "category": "orchestration",
+      "status": "active"
+    },
+    "ide": {
+      "name": "ide",
+      "description": "HeadyAutoIDE spec-driven agentic coding",
+      "category": "development",
+      "status": "active"
+    },
+    "playbook": {
+      "name": "playbook",
+      "description": "Build Playbook for first-time correctness",
+      "category": "methodology",
+      "status": "active"
+    },
+    "agentic": {
+      "name": "agentic",
+      "description": "Agentic coding techniques and loops",
+      "category": "development",
       "status": "active"
     }
   },

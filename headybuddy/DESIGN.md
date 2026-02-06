@@ -224,7 +224,148 @@ All animations use `ease-in-out` curves. No jarring transitions.
 
 ---
 
-## 10. Gemini-Style UI Prompt (for AI-generated designs)
+## 10. Resource Health Indicators
+
+### 10.1 Compact Resource Dot (Collapsed Pill)
+
+A tiny color-coded dot beside the status text communicates resource health at a glance:
+
+| State | Color | Animation |
+|-------|-------|-----------|
+| **Healthy** (<70% CPU/RAM) | `heady-emerald` | None |
+| **Constrained** (70–85%) | `heady-amber` | None |
+| **Critical** (>85%) | `red-400` | Pulse |
+
+Hover tooltip shows: `CPU: XX% | RAM: XX%`.
+
+### 10.2 Compact Resource Badge (Main Widget Header)
+
+A small pill in the header shows `Healthy` / `Constrained` / `Critical` / `Safe Mode`:
+- **Shape**: Pill (`border-radius: 9999px`)
+- **Background**: `heady-border/30`
+- **Text**: `heady-muted`, 9 px
+- **Dot**: Color matches severity
+- **Click**: Navigates to Expanded View → Resources tab
+
+### 10.3 Full Resource Health Panel (Expanded View → Resources Tab)
+
+```
+┌─────────────────────────────────────┐
+│  Resource Health                    │
+├─────────────────────────────────────┤
+│  CPU  ████████░░░░  75%            │
+│  RAM  ██████████░░  83% 13.4/16 GB │
+│  Disk ████░░░░░░░░  38% 180/480 GB │
+│  GPU  ██████░░░░░░  60%            │
+│  VRAM ████████░░░░  72% 5.8/8 GB   │
+├─────────────────────────────────────┤
+│  [Explain slowdown] [Pause jobs]   │
+│  [Review GPU] [Safe mode]          │
+└─────────────────────────────────────┘
+```
+
+**Bar colors** match severity thresholds defined in
+`configs/resource-management-protocol.yaml`:
+
+| Severity | Bar Color | Condition |
+|----------|-----------|-----------|
+| Healthy | `heady-emerald` | Below soft threshold |
+| Soft Warning | `heady-cyan` | At soft threshold |
+| Hard Warning | `heady-amber` | Above midpoint |
+| Critical | `red-500` | At hard threshold, pulsing |
+
+**Safe Mode banner**: Amber background with `heady-amber` text when active.
+
+### 10.4 Escalation Card
+
+When the resource manager requires user input, HeadyBuddy presents a
+structured card inside the chat:
+
+```
+┌─────────────────────────────────────┐
+│ ⚠ Resource Alert                    │
+│                                     │
+│ GPU VRAM at 93%, RAM at 87%.        │
+│ Primary contributors:               │
+│   • pyrefly.exe (PID 32624) 2.9 GB │
+│   • python.exe (PID 11096) 57 MB   │
+│                                     │
+│ Impact: IDE may slow, OOM risk.     │
+│                                     │
+│ [★ Recommended] [Continue All]      │
+│ [Safe Mode] [Manual Control]        │
+└─────────────────────────────────────┘
+```
+
+---
+
+## 11. Expanded View — Tab Architecture
+
+The Expanded View now supports four tabs:
+
+| Tab | Icon | Content |
+|-----|------|---------|
+| **Overview** | `LayoutDashboard` | Pipeline status, resource summary, activation state |
+| **Steps** | `ListChecks` | HCFullPipeline stage progress (7 stages) |
+| **Resources** | `Activity` | Full resource health panel + quick actions |
+| **Story** | `BookOpen` | Narrative timeline, project/feature/incident stories |
+| **History** | `MessageSquare` | Scrollable conversation history |
+
+Tabs use `heady-cyan` underline when active, `heady-muted` text when inactive.
+Only one tab is visible at a time.
+
+---
+
+## 12.1 Story Timeline Panel (Expanded View → Story Tab)
+
+The Story tab surfaces the **Story Driver** — a narrative intelligence layer
+that turns system events into coherent timelines.
+
+```
+┌─────────────────────────────────────┐
+│  Story Timeline                     │
+├─────────────────────────────────────┤
+│  Project — Feb 6, 2026             │
+│  Status: ongoing (12 events)        │
+│                                     │
+│  ── Timeline ──────────────────── │
+│  📌 User directive: "Build the      │
+│     landing page"                   │
+│  ● Build #141 succeeded.           │
+│  ⚠ Pipeline gate "resource" failed │
+│  ● Arena Mode selected Candidate B │
+│    (95% pass) and squashed.        │
+│  ● System entered safe mode.       │
+│  📝 Note: "Pivoting to new layout" │
+│                                     │
+├─────────────────────────────────────┤
+│ [What changed?] [Annotate]         │
+│ [Feature story] [Full summary]     │
+└─────────────────────────────────────┘
+```
+
+### Story Event Visual Indicators
+
+| Severity | Icon | Color |
+|----------|------|-------|
+| **info** | `●` (dot) | `heady-muted` |
+| **notable** | `◆` (diamond) | `heady-cyan` |
+| **critical** | `⚠` (warning) | `heady-amber` |
+| **pinned** | `📌` (pin) | `heady-emerald` |
+| **annotation** | `📝` (note) | `heady-magenta` |
+
+### Story Scope Badges
+
+| Scope | Badge Color | Example |
+|-------|-------------|---------|
+| **project** | `heady-cyan/20` bg, `heady-cyan` text | "Project — Feb 6" |
+| **feature** | `heady-emerald/20` bg, `heady-emerald` text | "Feature: Landing Page" |
+| **incident** | `heady-amber/20` bg, `heady-amber` text | "Incident: OOM Event" |
+| **experiment** | `heady-magenta/20` bg, `heady-magenta` text | "Experiment: Arena Run #3" |
+
+---
+
+## 12. Gemini-Style UI Prompt (for AI-generated designs)
 
 Use this prompt with design-generating models to produce HeadyBuddy mockups:
 
@@ -236,6 +377,8 @@ Use this prompt with design-generating models to produce HeadyBuddy mockups:
 > success `#34d399`, warning `#fbbf24`, text `#e2e8f0`.
 > **Avatar**: Sacred Geometry hexagon with Star of David inner motif.
 >
-> Design three states: collapsed pill, main widget, expanded view.
+> Design four states: collapsed pill, main widget, expanded view (with
+> Overview / Steps / Resources / History tabs), and escalation card.
+> Include resource health indicators at all widget states.
 > Use Adaptive Cards semantics where possible.
 > Ensure non-intrusive, accessible, dark-mode-first design.

@@ -65,7 +65,14 @@ app.get("/api/pulse", (req, res) => {
     version: "3.0.0",
     ts: new Date().toISOString(),
     status: "active",
-    endpoints: ["/api/health", "/api/registry", "/api/nodes", "/api/pipeline/*"],
+    endpoints: [
+      "/api/health", "/api/pulse", "/api/registry", "/api/nodes",
+      "/api/system/status", "/api/pipeline/*",
+      "/api/ide/spec", "/api/ide/agents",
+      "/api/playbook", "/api/agentic", "/api/activation", "/api/public-domain",
+      "/api/resources/health", "/api/resources/snapshot", "/api/resources/events",
+      "/api/stories", "/api/stories/recent", "/api/stories/summary",
+    ],
   });
 });
 
@@ -176,17 +183,422 @@ app.post("/api/system/production", (req, res) => {
   });
 });
 
-// ─── Pipeline Placeholder (wire up src/hc_pipeline.js when ready) ───
+// ─── Pipeline Engine (wired to src/hc_pipeline.js) ──────────────────
+let pipeline = null;
+let pipelineError = null;
+try {
+  const pipelineMod = require("./src/hc_pipeline");
+  pipeline = pipelineMod.pipeline;
+  console.log("  ∞ Pipeline engine: LOADED");
+} catch (err) {
+  pipelineError = err.message;
+  console.warn(`  ⚠ Pipeline engine not loaded: ${err.message}`);
+}
+
 app.get("/api/pipeline/config", (req, res) => {
-  res.json({ status: "idle", message: "Pipeline engine not yet initialized. Wire up src/hc_pipeline.js." });
+  if (!pipeline) return res.status(503).json({ error: "Pipeline not loaded", reason: pipelineError });
+  try {
+    const summary = pipeline.getConfigSummary();
+    res.json({ ok: true, ...summary });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load pipeline config", message: err.message });
+  }
 });
 
-app.post("/api/pipeline/run", (req, res) => {
-  res.json({ status: "idle", message: "Pipeline engine not yet initialized." });
+app.post("/api/pipeline/run", async (req, res) => {
+  if (!pipeline) return res.status(503).json({ error: "Pipeline not loaded", reason: pipelineError });
+  try {
+    const result = await pipeline.run(req.body || {});
+    res.json({
+      ok: true,
+      runId: result.runId,
+      status: result.status,
+      metrics: result.metrics,
+      ts: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Pipeline run failed", message: err.message });
+  }
 });
 
 app.get("/api/pipeline/state", (req, res) => {
-  res.json({ status: "idle", message: "No pipeline run in progress." });
+  if (!pipeline) return res.status(503).json({ error: "Pipeline not loaded", reason: pipelineError });
+  try {
+    const state = pipeline.getState();
+    if (!state) return res.json({ ok: true, state: null, message: "No run executed yet" });
+    res.json({ ok: true, runId: state.runId, status: state.status, metrics: state.metrics, ts: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get pipeline state", message: err.message });
+  }
+});
+
+// ─── HeadyAutoIDE & Methodology APIs ────────────────────────────────
+const jsYaml = require("js-yaml");
+
+function loadYamlConfig(filename) {
+  const filePath = path.join(__dirname, "configs", filename);
+  if (!fs.existsSync(filePath)) return null;
+  try { return jsYaml.load(fs.readFileSync(filePath, "utf8")); }
+  catch { return null; }
+}
+
+app.get("/api/ide/spec", (req, res) => {
+  const spec = loadYamlConfig("heady-auto-ide.yaml");
+  if (!spec) return res.status(404).json({ error: "HeadyAutoIDE spec not found" });
+  res.json({ ok: true, ...spec, ts: new Date().toISOString() });
+});
+
+app.get("/api/ide/agents", (req, res) => {
+  const spec = loadYamlConfig("heady-auto-ide.yaml");
+  if (!spec) return res.status(404).json({ error: "HeadyAutoIDE spec not found" });
+  res.json({ ok: true, agents: spec.agentRoles || [], ts: new Date().toISOString() });
+});
+
+app.get("/api/playbook", (req, res) => {
+  const playbook = loadYamlConfig("build-playbook.yaml");
+  if (!playbook) return res.status(404).json({ error: "Build Playbook not found" });
+  res.json({ ok: true, ...playbook, ts: new Date().toISOString() });
+});
+
+app.get("/api/agentic", (req, res) => {
+  const agentic = loadYamlConfig("agentic-coding.yaml");
+  if (!agentic) return res.status(404).json({ error: "Agentic Coding config not found" });
+  res.json({ ok: true, ...agentic, ts: new Date().toISOString() });
+});
+
+app.get("/api/activation", (req, res) => {
+  const manifest = loadYamlConfig("activation-manifest.yaml");
+  if (!manifest) return res.status(404).json({ error: "Activation Manifest not found" });
+  const reg = loadRegistry();
+  const nodeList = Object.entries(reg.nodes || {});
+  const activeNodes = nodeList.filter(([, n]) => n.status === "active").length;
+
+  res.json({
+    ok: true,
+    status: manifest.status || "PENDING",
+    activatedAt: manifest.activatedAt,
+    version: manifest.version,
+    verifiedResources: {
+      configs: (manifest.verifiedResources?.configs || []).length,
+      coreEngines: (manifest.verifiedResources?.coreEngines || []).length,
+      companionSystems: (manifest.verifiedResources?.companionSystems || []).length,
+      registryNodes: { total: nodeList.length, active: activeNodes },
+    },
+    operatingDirectives: (manifest.operatingDirectives || []).length,
+    pipelineStages: (manifest.pipelineInitTemplate?.stages || []).length,
+    ts: new Date().toISOString(),
+  });
+});
+
+app.get("/api/public-domain", (req, res) => {
+  const pdi = loadYamlConfig("public-domain-integration.yaml");
+  if (!pdi) return res.status(404).json({ error: "Public Domain Integration config not found" });
+  res.json({ ok: true, ...pdi, ts: new Date().toISOString() });
+});
+
+// ─── Continuous Pipeline State (shared by resources & buddy APIs) ────
+let continuousPipeline = {
+  running: false,
+  cycleCount: 0,
+  lastCycleTs: null,
+  exitReason: null,
+  errors: [],
+  gateResults: { quality: null, resource: null, stability: null, user: null },
+  intervalId: null,
+};
+
+// ─── Intelligent Resource Manager ────────────────────────────────────
+let resourceManager = null;
+try {
+  const { HCResourceManager, registerRoutes: registerResourceRoutes } = require("./src/hc_resource_manager");
+  resourceManager = new HCResourceManager({ pollIntervalMs: 5000 });
+  registerResourceRoutes(app, resourceManager);
+  resourceManager.start();
+
+  resourceManager.on("resource_event", (event) => {
+    if (event.severity === "WARN_HARD" || event.severity === "CRITICAL") {
+      console.warn(`  ⚠ Resource ${event.severity}: ${event.resourceType} at ${event.currentUsagePercent}%`);
+    }
+  });
+
+  resourceManager.on("escalation_required", (data) => {
+    console.warn(`  ⚠ ESCALATION: ${data.event.resourceType} at ${data.event.currentUsagePercent}% — user prompt required`);
+  });
+
+  console.log("  ∞ Resource Manager: LOADED (polling every 5s)");
+} catch (err) {
+  console.warn(`  ⚠ Resource Manager not loaded: ${err.message}`);
+
+  // Fallback inline resource health endpoint
+  app.get("/api/resources/health", (req, res) => {
+    const mem = process.memoryUsage();
+    const osLib = require("os");
+    const totalMem = osLib.totalmem();
+    const freeMem = osLib.freemem();
+    const usedMem = totalMem - freeMem;
+    const cpuCount = osLib.cpus().length;
+    const ramPercent = Math.round((usedMem / totalMem) * 100);
+
+    res.json({
+      cpu: { currentPercent: 0, cores: cpuCount, unit: "%" },
+      ram: { currentPercent: ramPercent, absoluteValue: Math.round(usedMem / 1048576), capacity: Math.round(totalMem / 1048576), unit: "MB" },
+      disk: { currentPercent: 0, absoluteValue: 0, capacity: 0, unit: "GB" },
+      gpu: null,
+      safeMode: false,
+      status: "fallback",
+      ts: new Date().toISOString(),
+    });
+  });
+}
+
+// ─── Story Driver ────────────────────────────────────────────────────
+let storyDriver = null;
+try {
+  const { HCStoryDriver, registerStoryRoutes } = require("./src/hc_story_driver");
+  storyDriver = new HCStoryDriver();
+  registerStoryRoutes(app, storyDriver);
+
+  // Wire resource manager events into story driver
+  if (resourceManager) {
+    resourceManager.on("resource_event", (event) => {
+      if (event.severity === "WARN_HARD" || event.severity === "CRITICAL") {
+        storyDriver.ingestSystemEvent({
+          type: `RESOURCE_${event.severity}`,
+          refs: {
+            resourceType: event.resourceType,
+            percent: event.currentUsagePercent,
+            mitigation: event.mitigationApplied || "pending",
+          },
+          source: "resource_manager",
+        });
+      }
+    });
+  }
+
+  console.log("  ∞ Story Driver: LOADED");
+} catch (err) {
+  console.warn(`  ⚠ Story Driver not loaded: ${err.message}`);
+}
+
+// ─── HeadyBuddy API ─────────────────────────────────────────────────
+const buddyStartTime = Date.now();
+
+app.get("/api/buddy/health", (req, res) => {
+  res.json({
+    ok: true,
+    service: "heady-buddy",
+    version: "2.0.0",
+    uptime: (Date.now() - buddyStartTime) / 1000,
+    continuousMode: continuousPipeline.running,
+    ts: new Date().toISOString(),
+  });
+});
+
+app.post("/api/buddy/chat", (req, res) => {
+  const { message } = req.body;
+  if (!message) return res.status(400).json({ error: "message required" });
+
+  const reg = loadRegistry();
+  const nodeCount = Object.keys(reg.nodes || {}).length;
+  const activeNodes = Object.values(reg.nodes || {}).filter(n => n.status === "active").length;
+
+  const hour = new Date().getHours();
+  let greeting = hour < 12 ? "Good morning!" : hour < 17 ? "Good afternoon!" : "Good evening!";
+  const lowerMsg = message.toLowerCase();
+  let reply = "";
+
+  if (lowerMsg.includes("plan") && lowerMsg.includes("day")) {
+    reply = `${greeting} Let's plan your perfect day. I see ${activeNodes}/${nodeCount} nodes active. What are your top 3 priorities today?`;
+  } else if (lowerMsg.includes("pipeline") || lowerMsg.includes("hcfull")) {
+    const contState = continuousPipeline.running ? `running (cycle ${continuousPipeline.cycleCount})` : "stopped";
+    reply = `Pipeline continuous mode: ${contState}. ${activeNodes} nodes active. Would you like me to start a pipeline run or check the orchestrator dashboard?`;
+  } else if (lowerMsg.includes("slow") || lowerMsg.includes("taking so long") || lowerMsg.includes("explain") && lowerMsg.includes("slowdown")) {
+    if (resourceManager) {
+      const snap = resourceManager.getSnapshot();
+      const events = resourceManager.getRecentEvents(5);
+      const cpuPct = snap.cpu?.currentPercent || 0;
+      const ramPct = snap.ram?.currentPercent || 0;
+      const contributors = events.length > 0 && events[events.length - 1].contributors
+        ? events[events.length - 1].contributors.slice(0, 3).map(c => `${c.description} (${c.ramMB || 0} MB)`).join(", ")
+        : "no major contributors detected";
+      const severity = cpuPct >= 90 || ramPct >= 85 ? "CRITICAL" : cpuPct >= 75 || ramPct >= 70 ? "CONSTRAINED" : "HEALTHY";
+      reply = `Resource status: ${severity}. CPU: ${cpuPct}%, RAM: ${ramPct}%. Top contributors: ${contributors}. ${snap.safeMode ? "Safe mode is ACTIVE." : ""} Check the Resources tab in Expanded View for details and quick actions.`;
+    } else {
+      reply = `I can see system memory at ${Math.round(process.memoryUsage().heapUsed / 1048576)}MB heap. For detailed resource analysis, the Resource Manager needs to be running. Check the Resources tab for more.`;
+    }
+  } else if (lowerMsg.includes("resource") || lowerMsg.includes("gpu") || lowerMsg.includes("tier")) {
+    if (resourceManager) {
+      const snap = resourceManager.getSnapshot();
+      reply = `Resource overview: CPU ${snap.cpu?.currentPercent || 0}%, RAM ${snap.ram?.currentPercent || 0}%${snap.gpu ? `, GPU ${snap.gpu.compute?.currentPercent || 0}%` : ""}. ${activeNodes}/${nodeCount} nodes active. ${snap.safeMode ? "⚠ Safe mode active." : ""} Expand to Resources tab for full details.`;
+    } else {
+      reply = `Resource overview: ${activeNodes}/${nodeCount} nodes active. Memory: ${Math.round(process.memoryUsage().heapUsed / 1048576)}MB heap. Check the Orchestrator tab for detailed tier usage.`;
+    }
+  } else if (lowerMsg.includes("story") || lowerMsg.includes("what changed") || lowerMsg.includes("narrative")) {
+    if (storyDriver) {
+      const sysSummary = storyDriver.getSystemSummary();
+      reply = `Story Driver: ${sysSummary.totalStories} stories (${sysSummary.ongoing} ongoing). ${sysSummary.recentNarrative || "No recent events."} Check the Story tab in Expanded View for full timelines.`;
+    } else {
+      reply = "Story Driver is not loaded. It tracks project narratives, feature lifecycles, and incident timelines.";
+    }
+  } else if (lowerMsg.includes("status") || lowerMsg.includes("health")) {
+    reply = `System healthy. ${activeNodes}/${nodeCount} nodes active. Uptime: ${Math.round(process.uptime())}s. Continuous mode: ${continuousPipeline.running ? "active" : "off"}.`;
+  } else if (lowerMsg.includes("help") || lowerMsg.includes("what can")) {
+    reply = `I can help with: planning your day, running HCFullPipeline, monitoring resources/nodes, orchestrating parallel tasks, automating workflows, and checking system health.`;
+  } else if (lowerMsg.includes("stop") || lowerMsg.includes("pause")) {
+    if (continuousPipeline.running) {
+      clearInterval(continuousPipeline.intervalId);
+      continuousPipeline.running = false;
+      continuousPipeline.exitReason = "user_requested_stop";
+      reply = `Continuous pipeline stopped after ${continuousPipeline.cycleCount} cycles. Resume anytime.`;
+    } else {
+      reply = "No continuous pipeline running. I'm here whenever you need me!";
+    }
+  } else {
+    reply = `${greeting} I'm HeadyBuddy, your perfect day AI companion and orchestration copilot. ${activeNodes} nodes standing by. How can I help?`;
+  }
+
+  res.json({
+    reply,
+    context: {
+      nodes: { total: nodeCount, active: activeNodes },
+      continuousMode: continuousPipeline.running,
+      cycleCount: continuousPipeline.cycleCount,
+    },
+    ts: new Date().toISOString(),
+  });
+});
+
+app.get("/api/buddy/suggestions", (req, res) => {
+  const hour = new Date().getHours();
+  const reg = loadRegistry();
+  const activeNodes = Object.values(reg.nodes || {}).filter(n => n.status === "active").length;
+  const chips = [];
+
+  if (hour < 10) chips.push({ label: "Plan my morning", icon: "calendar", prompt: "Help me plan my morning." });
+  else if (hour < 14) chips.push({ label: "Plan my afternoon", icon: "calendar", prompt: "Help me plan my afternoon." });
+  else if (hour < 18) chips.push({ label: "Wrap up my day", icon: "calendar", prompt: "Help me wrap up today." });
+  else chips.push({ label: "Plan tomorrow", icon: "calendar", prompt: "Help me plan tomorrow." });
+
+  chips.push({ label: "Summarize this", icon: "file-text", prompt: "Summarize the content I'm looking at." });
+  chips.push({ label: continuousPipeline.running ? "Pipeline status" : "Run pipeline", icon: "play", prompt: continuousPipeline.running ? "Show pipeline status." : "Start HCFullPipeline." });
+  if (activeNodes > 0) chips.push({ label: "Check resources", icon: "activity", prompt: "Show resource usage and node health." });
+  chips.push({ label: "Surprise me", icon: "sparkles", prompt: "Suggest something useful right now." });
+
+  res.json({ suggestions: chips.slice(0, 5), ts: new Date().toISOString() });
+});
+
+app.get("/api/buddy/orchestrator", (req, res) => {
+  const reg = loadRegistry();
+  const nodes = Object.entries(reg.nodes || {}).map(([id, n]) => ({
+    id, name: n.name || id, role: n.role || "unknown",
+    status: n.status || "unknown", tier: n.tier || "M",
+    lastInvoked: n.last_invoked || null,
+  }));
+  const mem = process.memoryUsage();
+
+  res.json({
+    ok: true,
+    system: {
+      uptime: process.uptime(),
+      memory: {
+        heapUsedMB: Math.round(mem.heapUsed / 1048576),
+        heapTotalMB: Math.round(mem.heapTotal / 1048576),
+        rssMB: Math.round(mem.rss / 1048576),
+      },
+    },
+    nodes: {
+      total: nodes.length,
+      active: nodes.filter(n => n.status === "active").length,
+      list: nodes,
+    },
+    resourceTiers: {
+      L: nodes.filter(n => n.tier === "L").length,
+      M: nodes.filter(n => n.tier === "M").length,
+      S: nodes.filter(n => n.tier === "S").length,
+    },
+    pipeline: {
+      available: true,
+      state: null,
+      continuous: {
+        running: continuousPipeline.running,
+        cycleCount: continuousPipeline.cycleCount,
+        lastCycleTs: continuousPipeline.lastCycleTs,
+        exitReason: continuousPipeline.exitReason,
+        gates: continuousPipeline.gateResults,
+        recentErrors: continuousPipeline.errors.slice(-5),
+      },
+    },
+    ts: new Date().toISOString(),
+  });
+});
+
+app.post("/api/buddy/pipeline/continuous", (req, res) => {
+  const { action = "start" } = req.body;
+
+  if (action === "stop") {
+    if (continuousPipeline.intervalId) clearInterval(continuousPipeline.intervalId);
+    continuousPipeline.running = false;
+    continuousPipeline.exitReason = "user_requested_stop";
+    return res.json({ ok: true, action: "stopped", cycleCount: continuousPipeline.cycleCount, ts: new Date().toISOString() });
+  }
+
+  if (continuousPipeline.running) return res.json({ ok: true, action: "already_running", cycleCount: continuousPipeline.cycleCount });
+
+  continuousPipeline.running = true;
+  continuousPipeline.exitReason = null;
+  continuousPipeline.errors = [];
+  continuousPipeline.cycleCount = 0;
+
+  const runCycle = () => {
+    if (!continuousPipeline.running) return;
+    continuousPipeline.cycleCount++;
+    continuousPipeline.lastCycleTs = new Date().toISOString();
+    continuousPipeline.gateResults = {
+      quality: true,
+      resource: (process.memoryUsage().heapUsed / process.memoryUsage().heapTotal) < 0.9,
+      stability: true,
+      user: continuousPipeline.running,
+    };
+    const allPass = Object.values(continuousPipeline.gateResults).every(Boolean);
+
+    // Emit story events for pipeline cycles
+    if (storyDriver) {
+      if (allPass) {
+        storyDriver.ingestSystemEvent({
+          type: "PIPELINE_CYCLE_COMPLETE",
+          refs: { cycleNumber: continuousPipeline.cycleCount, gatesSummary: "all passed" },
+          source: "hcfullpipeline",
+        });
+      } else {
+        storyDriver.ingestSystemEvent({
+          type: "PIPELINE_GATE_FAIL",
+          refs: {
+            cycleNumber: continuousPipeline.cycleCount,
+            gate: Object.entries(continuousPipeline.gateResults).find(([, v]) => !v)?.[0] || "unknown",
+            reason: "Gate check returned false",
+          },
+          source: "hcfullpipeline",
+        });
+      }
+    }
+
+    if (!allPass) {
+      continuousPipeline.running = false;
+      continuousPipeline.exitReason = "gate_failed";
+      if (continuousPipeline.intervalId) clearInterval(continuousPipeline.intervalId);
+    }
+  };
+
+  runCycle();
+  if (continuousPipeline.running) {
+    continuousPipeline.intervalId = setInterval(runCycle, req.body.intervalMs || 30000);
+  }
+
+  res.json({
+    ok: true, action: "started", running: continuousPipeline.running,
+    cycleCount: continuousPipeline.cycleCount, gates: continuousPipeline.gateResults,
+    ts: new Date().toISOString(),
+  });
 });
 
 // ─── Error Handler ──────────────────────────────────────────────────

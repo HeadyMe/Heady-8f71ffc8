@@ -102,3 +102,39 @@ circuitBreaker:
       failureThreshold: 5
     - name: render-deploy
       failureThreshold: 2
+
+# ─── LOCAL RESOURCE THRESHOLDS ──────────────────────────────────────────────
+# Aligns with configs/resource-management-protocol.yaml
+localResourceThresholds:
+  CPU:
+    softPercent: 75
+    hardPercent: 90
+  RAM:
+    softPercent: 70
+    hardPercent: 85
+  DISK:
+    softPercent: 80
+    hardPercent: 92
+  GPU_COMPUTE:
+    softPercent: 75
+    hardPercent: 90
+  GPU_VRAM:
+    softPercent: 70
+    hardPercent: 85
+
+# ─── RESOURCE MANAGEMENT INTEGRATION ───────────────────────────────────────
+resourceManagement:
+  protocolConfig: configs/resource-management-protocol.yaml
+  engine: src/hc_resource_manager.js
+  pollingIntervalMs: 5000
+  logDestination: logs/resource-events.jsonl
+  userModes:
+    - id: performance
+      description: Aggressively protect interactivity
+      pauseBackgroundOnSoft: true
+    - id: throughput
+      description: Accept sluggishness for batch/training
+      pauseBackgroundOnSoft: false
+    - id: quiet
+      description: Suppress proactive resource suggestions
+      suppressChips: true

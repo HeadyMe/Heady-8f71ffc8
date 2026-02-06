@@ -57,8 +57,13 @@ function loadAllConfigs() {
     governance: loadYaml("governance-policies.yaml"),
     concepts: loadYaml("concepts-index.yaml"),
   };
-  // app-readiness is optional (not all deploys have it)
+  // Optional configs — new pipeline capabilities
   try { configs.appReadiness = loadYaml("app-readiness.yaml"); } catch (_) { configs.appReadiness = {}; }
+  try { configs.headyAutoIDE = loadYaml("heady-auto-ide.yaml"); } catch (_) { configs.headyAutoIDE = {}; }
+  try { configs.buildPlaybook = loadYaml("build-playbook.yaml"); } catch (_) { configs.buildPlaybook = {}; }
+  try { configs.agenticCoding = loadYaml("agentic-coding.yaml"); } catch (_) { configs.agenticCoding = {}; }
+  try { configs.publicDomainIntegration = loadYaml("public-domain-integration.yaml"); } catch (_) { configs.publicDomainIntegration = {}; }
+  try { configs.activationManifest = loadYaml("activation-manifest.yaml"); } catch (_) { configs.activationManifest = {}; }
   return configs;
 }
 

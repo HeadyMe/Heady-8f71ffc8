@@ -38,6 +38,8 @@
 16. [Environment Variables](#16-environment-variables)
 17. [Workflows](#17-workflows)
 18. [Troubleshooting](#18-troubleshooting)
+19. [Story Driver — Narrative Intelligence](#19-story-driver--narrative-intelligence)
+20. [Service Implementation Best Practices](#20-service-implementation-best-practices)
 
 ---
 
@@ -128,6 +130,7 @@ npm run dev
 | **python-worker** | Python background worker | 5000 | N/A | Available |
 | **MCP Server (stdio)** | Model Context Protocol | stdio | N/A | Active |
 | **Render MCP Server** | MCP over stdio | stdio | N/A | Active |
+| **Story Driver** | Narrative intelligence | — (in-process) | `GET /api/stories/summary` | Active |
 | **Postgres** | Database | 5432 | TCP connection | Available |
 | **Redis** | Cache | 6379 | TCP connection | Available |
 
@@ -957,6 +960,162 @@ curl -X POST http://localhost:3300/api/system/production
 
 ---
 
+## 19. Story Driver — Narrative Intelligence
+
+The **Story Driver** (`src/hc_story_driver.js`) turns system events into coherent narratives, keeping humans and agents aligned on project evolution.
+
+### Architecture
+
+```
+System Events (Pipeline, Builds, Arena, Resources, Registry, Buddy)
+    │
+    ▼
+┌──────────────────────────────────────┐
+│  Story Driver (hc_story_driver.js)   │
+│  ├── Event Ingestion & Filtering     │
+│  ├── Narrative Generation            │
+│  ├── Timeline Management             │
+│  └── Summary Generation              │
+└──────────────────────────────────────┘
+    │
+    ▼
+┌──────────────────────────────────────┐
+│  .heady/stories.json (persistent)    │
+│  ├── Story objects (4 scopes)        │
+│  └── StoryEvent timelines            │
+└──────────────────────────────────────┘
+    │
+    ▼
+  HeadyBuddy (chat, suggestions, Story tab)
+```
+
+### Story Scopes
+
+| Scope | Retention | Summary Interval |
+|-------|-----------|-----------------|
+| **project** | 365 days | Weekly |
+| **feature** | 180 days | On completion |
+| **incident** | 365 days | On resolution |
+| **experiment** | 90 days | On completion |
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/stories` | List all active stories |
+| `GET` | `/api/stories/recent` | Recent events across all stories |
+| `GET` | `/api/stories/summary` | System-wide narrative summary |
+| `GET` | `/api/stories/:id` | Get full story with timeline |
+| `GET` | `/api/stories/:id/timeline` | Get story timeline events |
+| `GET` | `/api/stories/:id/summary` | Get generated narrative summary |
+| `POST` | `/api/stories` | Create a new story |
+| `POST` | `/api/stories/:id/events` | Add event to a story |
+| `POST` | `/api/stories/:id/pin/:eventId` | Pin an important event |
+| `POST` | `/api/stories/:id/annotate` | Add user annotation |
+| `POST` | `/api/stories/:id/complete` | Mark story as completed |
+
+### Usage
+
+```bash
+# List stories
+curl http://localhost:3300/api/stories
+
+# System narrative summary
+curl http://localhost:3300/api/stories/summary
+
+# Create a story
+curl -X POST http://localhost:3300/api/stories \
+  -H "Content-Type: application/json" \
+  -d '{"scope":"feature","title":"Landing Page Rebuild"}'
+
+# Add event
+curl -X POST http://localhost:3300/api/stories/{id}/events \
+  -H "Content-Type: application/json" \
+  -d '{"type":"BUILD_SUCCESS","refs":{"buildId":"142"}}'
+
+# Annotate
+curl -X POST http://localhost:3300/api/stories/{id}/annotate \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Decided to pivot to new layout approach"}'
+
+# Ask HeadyBuddy
+curl -X POST http://localhost:3300/api/buddy/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"What changed recently?"}'
+```
+
+### Integration Points
+
+| System | How Stories Connect |
+|--------|-------------------|
+| **HCFullPipeline** | Cycle completions, gate pass/fail auto-logged |
+| **Resource Manager** | WARN_HARD and CRITICAL events auto-logged |
+| **HeadyBuddy** | "What changed?" / "story" / "narrative" queries |
+| **Registry** | Node activations, pattern changes |
+| **Maid** | Archives old stories, cleans broken refs |
+
+---
+
+## 20. Service Implementation Best Practices
+
+### Standardized Patterns Across All Services
+
+| Pattern | Implementation |
+|---------|---------------|
+| **Health endpoint** | Every service exposes `GET /health` or `GET /api/health` |
+| **Structured logging** | JSON format with `service`, `request_id`, `timestamp`, `level` |
+| **Config via env** | All configuration through environment variables |
+| **Graceful shutdown** | Handle `SIGTERM`, drain connections, flush state |
+| **Error boundaries** | Never crash on unhandled promise rejections |
+
+### Docker Health Checks
+
+```yaml
+# Node.js services
+healthcheck:
+  test: ["CMD", "wget", "-qO-", "http://localhost:PORT/api/health"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+
+# Postgres
+healthcheck:
+  test: ["CMD-SHELL", "pg_isready -U heady -d heady"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+
+# Redis
+healthcheck:
+  test: ["CMD", "redis-cli", "ping"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+```
+
+### Network Scoping
+
+- **External**: Only `heady-manager` (8080/3300) and noVNC (6080) exposed to host
+- **Internal**: Postgres, Redis, MCP Server, Python Worker on internal `heady-net` only
+- Use `expose` (not `ports`) for internal-only services
+
+### Observability Checklist
+
+- [ ] Metrics: latency, error rate, throughput, resource usage per service
+- [ ] Logs: structured JSON with correlation IDs
+- [ ] Tracing: OpenTelemetry spans across service boundaries
+- [ ] Dashboards: HeadyBuddy Orchestrator tab shows live system state
+- [ ] Story Driver: significant events auto-narrated for context
+
+### Squash-Merge as Default
+
+For every feature branch that goes through Arena Mode or significant refactors:
+- Use `git merge --squash` so main stays clean
+- Each feature = one well-described commit
+- Story Driver records the merge event for transparency
+
+---
+
 ## Quiz & Flashcard Review
 
 ### Quickstart
@@ -996,6 +1155,28 @@ curl -X POST http://localhost:3300/api/system/production
 
 - **Q: What happens when ORS drops below 50?**
   A: Recovery mode — repair only, escalate to owner.
+
+### Story Driver
+
+- **Q: What are the four story scopes?**
+  A: Project, Feature, Incident, Experiment.
+
+- **Q: What does the Story Driver do?**
+  A: Turns system events (pipeline cycles, builds, arena results, resource incidents, registry changes) into coherent human-readable narratives with timelines.
+
+- **Q: How does HeadyBuddy surface story data?**
+  A: Via chat ("What changed?", "story", "narrative" keywords), the Story tab in Expanded View, and suggestion chips.
+
+- **Q: Name two events that are always included in narratives.**
+  A: BUILD_FAILED and ARENA_WINNER_CHOSEN (also PIPELINE_GATE_FAIL, RESOURCE_CRITICAL, SCHEMA_MIGRATED, USER_DIRECTIVE, USER_PIVOT).
+
+### Services Architecture
+
+- **Q: What services does the full docker-compose.yml stack include?**
+  A: heady-manager, headybuddy-widget, python-worker, mcp-server, postgres, redis.
+
+- **Q: What is the network scoping rule for Docker services?**
+  A: Only heady-manager (3300) and noVNC (6080) exposed externally; Postgres, Redis, MCP Server, Python Worker are internal only.
 
 ---
 

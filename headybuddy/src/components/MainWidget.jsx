@@ -9,17 +9,20 @@
  */
 
 import React, { useState, useRef, useEffect } from "react";
-import { ChevronDown, Send, Mic, Settings } from "lucide-react";
+import { ChevronDown, ChevronUp, Send, Mic, Settings } from "lucide-react";
 import SacredAvatar from "./SacredAvatar";
 import SuggestionChips from "./SuggestionChips";
 import ChatMessage from "./ChatMessage";
+import ResourceHealthBar from "./ResourceHealthBar";
 
 export default function MainWidget({
   status,
   messages,
   onSend,
   onCollapse,
+  onExpand,
   onSuggestion,
+  resourceData,
 }) {
   const [input, setInput] = useState("");
   const scrollRef = useRef(null);
@@ -74,6 +77,9 @@ export default function MainWidget({
         </div>
 
         <div className="flex items-center gap-1">
+          {resourceData && (
+            <ResourceHealthBar resourceData={resourceData} compact onClick={onExpand} />
+          )}
           <button
             onClick={() => {}}
             className="p-1.5 rounded-lg text-heady-muted hover:text-heady-text hover:bg-heady-border/40 transition-colors"
@@ -81,6 +87,15 @@ export default function MainWidget({
           >
             <Settings size={14} />
           </button>
+          {onExpand && (
+            <button
+              onClick={onExpand}
+              className="p-1.5 rounded-lg text-heady-muted hover:text-heady-text hover:bg-heady-border/40 transition-colors"
+              title="Expand view"
+            >
+              <ChevronUp size={16} />
+            </button>
+          )}
           <button
             onClick={onCollapse}
             className="p-1.5 rounded-lg text-heady-muted hover:text-heady-text hover:bg-heady-border/40 transition-colors"

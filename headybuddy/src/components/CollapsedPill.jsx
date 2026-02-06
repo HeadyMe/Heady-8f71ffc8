@@ -20,7 +20,9 @@ const STATUS_LABEL = {
   error: "Retrying…",
 };
 
-export default function CollapsedPill({ status, onExpand, onSuggestion }) {
+export default function CollapsedPill({ status, onExpand, onSuggestion, resourceData }) {
+  const resStatus = getResourceStatus(resourceData);
+
   return (
     <div className="fixed bottom-6 right-6 z-[9999] animate-fade-in">
       {/* Suggestion chips float above the pill */}
@@ -46,11 +48,29 @@ export default function CollapsedPill({ status, onExpand, onSuggestion }) {
           <span className="text-[11px] font-bold text-heady-cyan tracking-wide uppercase">
             HeadyBuddy
           </span>
-          <span className="text-[10px] text-heady-muted">
-            {STATUS_LABEL[status] || "Ready"}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-heady-muted">
+              {STATUS_LABEL[status] || "Ready"}
+            </span>
+            {resStatus && (
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${resStatus.dot} ${resStatus.pulse ? "animate-pulse" : ""}`}
+                title={resStatus.title}
+              />
+            )}
+          </div>
         </div>
       </button>
     </div>
   );
+}
+
+function getResourceStatus(data) {
+  if (!data) return null;
+  const cpu = data.cpu?.currentPercent || 0;
+  const ram = data.ram?.currentPercent || 0;
+  const worst = Math.max(cpu, ram);
+  if (worst >= 85) return { dot: "bg-red-400", pulse: true, title: `CPU ${cpu}% RAM ${ram}%` };
+  if (worst >= 70) return { dot: "bg-heady-amber", pulse: false, title: `CPU ${cpu}% RAM ${ram}%` };
+  return { dot: "bg-heady-emerald", pulse: false, title: `CPU ${cpu}% RAM ${ram}%` };
 }

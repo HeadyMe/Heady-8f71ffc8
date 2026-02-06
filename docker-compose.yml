@@ -1,18 +1,46 @@
-version: '3.8'
+# ╔═══════════════════════════════════════════════════════════════╗
+# ║  HEADY SYSTEMS                                                 ║
+# ║  ━━━━━━━━━━━━━━                                                ║
+# ║  ∞ Sacred Geometry Architecture ∞                              ║
+# ║                                                                ║
+# ║  docker-compose.yml - Full Service Stack                       ║
+# ║                                                                ║
+# ║  Services: manager, frontend, widget, python-worker,           ║
+# ║            mcp-server, postgres, redis                         ║
+# ║                                                                ║
+# ║  Usage:                                                        ║
+# ║    docker compose up --build                                   ║
+# ║    Manager  → http://localhost:3300                             ║
+# ║    Frontend → served by manager (prod) or :5173 (dev)          ║
+# ║    Widget   → http://localhost:3400                             ║
+# ╚═══════════════════════════════════════════════════════════════╝
+
+version: '3.9'
 
 services:
+  # ── API Gateway & Orchestrator ──────────────────────────────────
   heady-manager:
     build: .
     container_name: heady-manager
     ports:
       - "3300:3300"
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       - PORT=3300
       - HEADY_TARGET=Docker
       - HEADY_VERSION=3.0.0
+      - DATABASE_URL=postgres://heady:heady_secret@heady-postgres:5432/heady
+      - REDIS_URL=redis://heady-redis:6379/0
     volumes:
       - heady-data:/app/.heady-memory
+      - heady-stories:/app/.heady
+    depends_on:
+      heady-postgres:
+        condition: service_healthy
+      heady-redis:
+        condition: service_healthy
     networks:
       - heady-net
     healthcheck:
@@ -22,17 +50,55 @@ services:
       retries: 3
     restart: unless-stopped
 
-  heady-redis:
-    image: redis:7-alpine
-    container_name: heady-redis
+  # ── HeadyBuddy Widget (React/Vite) ─────────────────────────────
+  headybuddy-widget:
+    build:
+      context: ./headybuddy
+      dockerfile: Dockerfile
+    container_name: headybuddy-widget
     ports:
-      - "6379:6379"
-    volumes:
-      - heady-redis:/data
+      - "3400:3400"
+    environment:
+      - VITE_API_BASE=http://heady-manager:3300/api
+    depends_on:
+      - heady-manager
     networks:
       - heady-net
     restart: unless-stopped
 
+  # ── Python Worker (background jobs, ML, data processing) ───────
+  python-worker:
+    build:
+      context: ./backend/python_worker
+      dockerfile: Dockerfile
+    container_name: python-worker
+    environment:
+      - REDIS_URL=redis://heady-redis:6379/0
+      - DATABASE_URL=postgres://heady:heady_secret@heady-postgres:5432/heady
+    depends_on:
+      heady-postgres:
+        condition: service_healthy
+      heady-redis:
+        condition: service_healthy
+    networks:
+      - heady-net
+    restart: unless-stopped
+
+  # ── MCP Server (Model Context Protocol bridge) ─────────────────
+  mcp-server:
+    build:
+      context: ./mcp-servers
+      dockerfile: Dockerfile
+    container_name: mcp-server
+    environment:
+      - PORT=7000
+    expose:
+      - "7000"
+    networks:
+      - heady-net
+    restart: unless-stopped
+
+  # ── Postgres (primary data store) ──────────────────────────────
   heady-postgres:
     image: postgres:16-alpine
     container_name: heady-postgres
@@ -46,10 +112,34 @@ services:
       - heady-postgres:/var/lib/postgresql/data
     networks:
       - heady-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U heady -d heady"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Redis (cache, job queue, ephemeral state) ──────────────────
+  heady-redis:
+    image: redis:7-alpine
+    container_name: heady-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - heady-redis:/data
+    networks:
+      - heady-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
 volumes:
   heady-data:
+  heady-stories:
   heady-redis:
   heady-postgres:
 
