@@ -176,6 +176,71 @@ app.post("/api/system/production", (req, res) => {
   });
 });
 
+// ─── HeadyBuddy Companion API ────────────────────────────────────────
+app.post("/api/buddy/chat", (req, res) => {
+  const { message, history } = req.body;
+  if (!message) return res.status(400).json({ error: "Message is required" });
+
+  // Placeholder response engine — wire to LLM backend (PYTHIA / OpenAI / local) when ready
+  const suggestions = [
+    "I can help you plan your day — just say 'plan my day'!",
+    "Try asking me to summarize something, or open HeadyAutoIDE.",
+    "I'm here whenever you need me. What's on your mind?",
+    "Let me know if you'd like step-by-step guidance on anything.",
+    "Ready to help you build something great today!",
+  ];
+
+  const reply = suggestions[Math.floor(Math.random() * suggestions.length)];
+
+  res.json({
+    ok: true,
+    reply,
+    context: {
+      messagesReceived: (history || []).length + 1,
+      engine: "placeholder",
+      note: "Wire to PYTHIA or external LLM for production responses.",
+    },
+    ts: new Date().toISOString(),
+  });
+});
+
+app.get("/api/buddy/health", (req, res) => {
+  res.json({
+    ok: true,
+    service: "headybuddy",
+    status: "active",
+    engine: "placeholder",
+    ts: new Date().toISOString(),
+  });
+});
+
+app.get("/api/buddy/suggestions", (req, res) => {
+  const hour = new Date().getHours();
+  let contextChips;
+
+  if (hour < 12) {
+    contextChips = [
+      { label: "Plan my morning", prompt: "Help me plan a productive morning." },
+      { label: "Review goals", prompt: "What are my priorities for today?" },
+      { label: "Quick win", prompt: "Suggest a quick task I can knock out right now." },
+    ];
+  } else if (hour < 17) {
+    contextChips = [
+      { label: "Plan afternoon", prompt: "Help me plan the rest of my afternoon." },
+      { label: "Focus session", prompt: "Set up a 25-minute focus session for me." },
+      { label: "Take a break", prompt: "I need a break. Suggest something refreshing." },
+    ];
+  } else {
+    contextChips = [
+      { label: "Wrap up day", prompt: "Help me wrap up and review what I accomplished today." },
+      { label: "Tomorrow prep", prompt: "Help me prepare for tomorrow." },
+      { label: "Learn something", prompt: "Teach me something interesting in 2 minutes." },
+    ];
+  }
+
+  res.json({ ok: true, suggestions: contextChips, ts: new Date().toISOString() });
+});
+
 // ─── Pipeline Placeholder (wire up src/hc_pipeline.js when ready) ───
 app.get("/api/pipeline/config", (req, res) => {
   res.json({ status: "idle", message: "Pipeline engine not yet initialized. Wire up src/hc_pipeline.js." });
