@@ -25,7 +25,18 @@
     "build:desktop": "cd headybrowser-desktop && npm run build",
     "build:mobile": "cd headybrowser-mobile && npm run build",
     "deploy": "node scripts/deploy.js",
-    "deploy:auto": "node scripts/deploy.js --auto"
+    "deploy:auto": "node scripts/deploy.js --auto",
+    "services:start": "node src/services/service-manager.js",
+    "services:status": "node -e \"const {getServiceManager}=require('./src/services/service-manager');const mgr=getServiceManager();mgr.start().then(()=>console.log(JSON.stringify(mgr.getStatus(),null,2)))\"",
+    "hcfp": "node scripts/hcfp-full-auto.js",
+    "hcfp:full-auto": "node scripts/hcfp-full-auto.js --full-auto",
+    "hcfp:monte-carlo": "node scripts/hcfp-full-auto.js --monte-carlo",
+    "hcfp:socratic": "node scripts/hcfp-full-auto.js --socratic",
+    "hcfp:arena": "node scripts/hcfp-full-auto.js --arena",
+    "branch:sync": "node scripts/branch-sync.js",
+    "branch:dev-to-staging": "node scripts/branch-sync.js --dev-to-staging",
+    "branch:staging-to-main": "node scripts/branch-sync.js --staging-to-main",
+    "branch:continuous": "node scripts/branch-sync.js --continuous"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
