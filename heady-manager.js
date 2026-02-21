@@ -162,8 +162,13 @@ const coreApi = require('./services/core-api');
 app.use("/api", coreApi);
 
 // ─── Swagger UI Setup ─────────────────────────────────────────────────
-const swaggerDocument = YAML.load('./docs/api/openapi.yaml');
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+try {
+  const swaggerDocument = YAML.load('./docs/api/openapi.yaml');
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+  console.log("  ∞ Swagger UI: LOADED → /api-docs");
+} catch (err) {
+  console.warn(`  ⚠ Swagger UI not loaded: ${err.message}`);
+}
 
 // ─── Imagination Routes ────────────────────────────────────────────
 if (imaginationRoutes) {
