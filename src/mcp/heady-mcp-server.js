@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
  * ╔══════════════════════════════════════════════════════════════════════╗
- * ║  HEADY MCP SERVER — stdio transport for IDE integration            ║
- * ║  Exposes all Heady Services via Model Context Protocol v1.26.0     ║
- * ║  Routes 100% of AI requests through Heady Brain / headyio.com      ║
+ * ║  HEADY MCP SERVER — HeadyAI-IDE Integration Gateway                ║
+ * ║  Exposes all 30 Heady Services via Model Context Protocol v1.26.0  ║
+ * ║  Routes 100% through HeadyBrain / HeadyBattle / headyio.com        ║
+ * ║  Sacred Geometry · Ensemble Intelligence · Anti-Template Policy    ║
  * ╚══════════════════════════════════════════════════════════════════════╝
  */
 
@@ -27,7 +28,7 @@ const NODE_ENV = process.env.NODE_ENV || 'production';
 const headers = {
   'Content-Type': 'application/json',
   ...(HEADY_API_KEY ? { 'Authorization': `Bearer ${HEADY_API_KEY}` } : {}),
-  'X-Heady-Source': 'google-antigravity-mcp',
+  'X-Heady-Source': 'heady-ide-mcp',
   'X-Heady-Version': '1.0.0',
 };
 
@@ -282,12 +283,14 @@ const HEADY_TOOLS = [
   },
   {
     name: 'heady_battle',
-    description: 'Run HeadyBattle — multi-branch orchestration and competitive code evaluation sessions.',
+    description: 'Run HeadyBattle — Arena Mode pits AI nodes against each other. Also supports single evaluation and leaderboard.',
     inputSchema: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['session', 'evaluate', 'compare'], description: 'Battle action' },
+        action: { type: 'string', enum: ['session', 'evaluate', 'arena', 'leaderboard', 'compare'], description: 'Battle action — use "arena" for multi-node competition' },
+        task: { type: 'string', description: 'Task description for arena mode' },
         code: { type: 'string', description: 'Code to evaluate' },
+        nodes: { type: 'array', items: { type: 'string' }, description: 'AI nodes to compete (default: all 7)' },
         branches: { type: 'array', items: { type: 'string' }, description: 'Branch names to compare' },
         criteria: { type: 'string', description: 'Evaluation criteria' },
       },
@@ -501,6 +504,21 @@ const HEADY_TOOLS = [
       },
     },
   },
+  {
+    name: 'heady_edge_ai',
+    description: 'Run AI inference at Cloudflare edge — embeddings, chat, classification, vector search. Ultra-low latency, no origin round-trip.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['embed', 'chat', 'classify', 'vectorize-insert', 'vectorize-query', 'queue'], description: 'Edge AI action' },
+        text: { type: 'string', description: 'Text input for embedding, classification, or vector operations' },
+        message: { type: 'string', description: 'Message for edge chat' },
+        model: { type: 'string', description: 'Model override (default: llama-3.1-8b for chat, bge-base for embed)' },
+        topK: { type: 'number', description: 'Number of results for vector query' },
+      },
+      required: ['action'],
+    },
+  },
 ];
 
 // ── List Tools ────────────────────────────────────────────────────────────────
@@ -522,7 +540,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           temperature: args.temperature ?? 0.7,
           max_tokens: args.max_tokens ?? 4096,
           context: args.context,
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: result.response || result.content || result.message || JSON.stringify(result) }],
@@ -536,7 +554,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           max_tokens: args.max_tokens ?? 2048,
           temperature: args.temperature ?? 0.3,
           stop: args.stop,
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: result.completion || result.text || result.content || JSON.stringify(result) }],
@@ -549,7 +567,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           type: args.type || 'general',
           language: args.language,
           focus: args.focus,
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result, null, 2) }],
@@ -560,7 +578,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await headyPost('/api/brain/embed', {
           text: args.text,
           model: args.model || 'nomic-embed-text',
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }],
@@ -587,7 +605,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           action: args.action,
           service: args.service,
           config: args.config,
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
@@ -599,7 +617,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           query: args.query,
           scope: args.scope || 'all',
           limit: args.limit || 10,
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
@@ -614,7 +632,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           focus: args.goals ? `Refactor for: ${args.goals.join(', ')}` : 'refactoring',
           context: args.context,
           task: 'refactor',
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result, null, 2) }],
@@ -627,7 +645,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           repository: args.repository,
           priority: args.priority || 'normal',
           autoCommit: args.autoCommit || false,
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
@@ -640,7 +658,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           mode: args.mode || 'deep',
           timeframe: args.timeframe || 'all',
           maxSources: args.maxSources || 10,
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
@@ -653,7 +671,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           modelId: args.modelId,
           query: args.query,
           task: args.task,
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
@@ -665,7 +683,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await headyPost(endpoint, {
           content: args.content,
           action: args.action || 'analyze',
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
@@ -686,19 +704,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             message: args.message,
             target: args.target,
             action: args.action || 'send',
-            source: 'google-antigravity',
+            source: 'heady-ide-mcp',
           });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
       case 'heady_battle': {
-        const endpoint = args.action === 'evaluate' ? '/api/battle/evaluate' : '/api/battle/session';
+        if (args.action === 'leaderboard') {
+          const result = await headyGet('/api/battle/leaderboard');
+          return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        }
+        const endpointMap = { arena: '/api/battle/arena', evaluate: '/api/battle/evaluate', session: '/api/battle/session', compare: '/api/battle/session' };
+        const endpoint = endpointMap[args.action] || '/api/battle/session';
         const result = await headyPost(endpoint, {
           action: args.action,
-          code: args.code,
+          task: args.task,
+          content: args.code,
+          nodes: args.nodes,
           branches: args.branches,
           criteria: args.criteria,
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
@@ -711,7 +736,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             code: args.code,
             language: args.language,
             action: args.action || 'analyze',
-            source: 'google-antigravity',
+            source: 'heady-ide-mcp',
           });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
@@ -722,7 +747,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: args.content,
           scope: args.scope || 'all',
           action: args.action || 'assess',
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
@@ -734,7 +759,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           language: args.language,
           framework: args.framework,
           action: args.action || 'generate',
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
@@ -746,7 +771,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           system: args.system,
           thinkingBudget: args.thinkingBudget || 32768,
           action: args.action || 'chat',
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: result.response || result.content || JSON.stringify(result, null, 2) }],
@@ -759,7 +784,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           message: args.message,
           model: args.model || 'gpt-4o',
           action: args.action || 'chat',
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: result.response || result.content || JSON.stringify(result, null, 2) }],
@@ -771,7 +796,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           prompt: args.prompt,
           model: args.model || 'gemini-3.1-pro-preview',
           action: args.action || 'generate',
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: result.response || result.content || JSON.stringify(result, null, 2) }],
@@ -783,7 +808,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           message: args.message,
           stream: args.stream || false,
           action: args.action || 'chat',
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return {
           content: [{ type: 'text', text: result.response || result.content || JSON.stringify(result, null, 2) }],
@@ -796,7 +821,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           code: args.code,
           language: args.language,
           action: args.action || 'generate',
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
@@ -808,7 +833,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           cursor_position: args.cursor_position,
           language: args.language,
           action: args.action || 'suggest',
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
@@ -819,7 +844,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           action: args.action,
           service: args.service,
           config: args.config,
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
@@ -833,7 +858,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             action: args.action,
             target: args.target,
             schedule: args.schedule,
-            source: 'google-antigravity',
+            source: 'heady-ide-mcp',
           });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
@@ -846,7 +871,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           : await headyPost(endpoint, {
             action: args.action,
             service: args.service,
-            source: 'google-antigravity',
+            source: 'heady-ide-mcp',
           });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
@@ -856,7 +881,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           action: args.action || 'analyze',
           image_url: args.image_url,
           prompt: args.prompt,
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
@@ -868,7 +893,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           data: args.data,
           context: args.context,
           action: args.action || 'predict',
-          source: 'google-antigravity',
+          source: 'heady-ide-mcp',
         });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
@@ -881,7 +906,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           : await headyPost(endpoint, {
             message: args.message,
             provider: args.provider || 'auto',
-            source: 'google-antigravity',
+            source: 'heady-ide-mcp',
           });
         return {
           content: [{ type: 'text', text: result.response || result.content || JSON.stringify(result, null, 2) }],
@@ -892,11 +917,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const endpointMap = { sync: '/api/notion/sync', status: '/api/notion/state', health: '/api/notion/health' };
         const endpoint = endpointMap[args.action] || '/api/notion/sync';
         const result = (args.action === 'sync')
-          ? await headyPost(endpoint, { source: 'google-antigravity' })
+          ? await headyPost(endpoint, { source: 'heady-ide-mcp' })
           : await headyGet(endpoint);
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
+      }
+
+      case 'heady_edge_ai': {
+        const edgeBase = process.env.HEADY_EDGE_URL || 'https://heady-edge-ai.headysystems.workers.dev';
+        const endpointMap = {
+          embed: '/api/edge/embed',
+          chat: '/api/edge/chat',
+          classify: '/api/edge/classify',
+          'vectorize-insert': '/api/edge/vectorize/insert',
+          'vectorize-query': '/api/edge/vectorize/query',
+          queue: '/api/edge/queue',
+        };
+        const endpoint = endpointMap[args.action] || '/api/edge/chat';
+        const result = await fetch(edgeBase + endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headers },
+          body: JSON.stringify({
+            text: args.text,
+            message: args.message,
+            model: args.model,
+            topK: args.topK,
+            source: 'heady-ide-mcp',
+          }),
+        }).then(r => r.json());
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
       default:
