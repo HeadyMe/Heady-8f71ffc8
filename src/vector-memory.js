@@ -22,6 +22,8 @@ const fs = require("fs");
 const path = require("path");
 
 const PHI = 1.6180339887;
+let federation = null;
+try { federation = require("./vector-federation"); } catch {}
 const VECTOR_STORE_PATH = path.join(__dirname, "..", "data", "vector-memory.json");
 const SHARD_DIR = path.join(__dirname, "..", "data", "vector-shards");
 const EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2";
@@ -180,6 +182,11 @@ async function ingestMemory({ content, metadata = {}, embedding = null }) {
 
     // Debounced persist
     schedulePersist(shardIdx);
+
+    // Fan-out to remote tiers (edge, gcloud, colab) — non-blocking
+    if (federation) {
+        federation.federatedInsert(entry).catch(() => {});
+    }
 
     return entry.id;
 }
