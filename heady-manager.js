@@ -370,6 +370,10 @@ vectorMemory.init();
 const vectorPipeline = require("./src/vector-pipeline");
 app.use(vectorPipeline.createVectorAugmentedMiddleware(vectorMemory));
 vectorPipeline.registerRoutes(app, vectorMemory);
+// ─── Vector Federation — Multi-Tier Distributed Storage ─────────────
+const vectorFederation = require("./src/vector-federation");
+vectorFederation.registerRoutes(app);
+
 console.log("  ∞ VectorPipeline: ACTIVE — every /brain/* call queries memory first");
 
 vectorMemory.registerRoutes(app);
