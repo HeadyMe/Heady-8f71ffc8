@@ -265,10 +265,102 @@ class AgentOrchestrator extends EventEmitter {
     }
 
     /**
+     * ═══ HeadyValidator — Pre-Action Protocol ═══════════════════════════
+     * ALWAYS runs BEFORE any task dispatch. Cannot be skipped.
+     *
+     * Checklist:
+     *   1. Validate handler exists (HeadyRegistry)
+     *   2. Enforce MIN_CONCURRENT (150 HeadySupervisors active)
+     *   3. Scan HeadyMemory for relevant context
+     *   4. Check HeadyPatterns for known optimizations
+     *   5. Audit the validation result
+     *
+     * @param {Object} task - { action, payload }
+     * @returns {Object} - { valid, context, patterns, supervisorCount }
+     */
+    async _headyValidator(task) {
+        const validation = {
+            action: task.action,
+            ts: Date.now(),
+            checks: {},
+        };
+
+        // ── 1. REGISTRY CHECK: Is this action registered? ──
+        const handlerExists = this.handlers.has(task.action);
+        validation.checks.registry = { pass: handlerExists, handler: task.action };
+
+        // ── 2. MIN-CONCURRENT ENFORCEMENT: 150 supervisors minimum ──
+        const supervisorCount = this.supervisors.size;
+        const minOk = supervisorCount >= this.minConcurrent;
+        if (!minOk) {
+            this._ensureMinimum();
+        }
+        validation.checks.minConcurrent = {
+            pass: true, // always pass because we enforce it
+            count: this.supervisors.size,
+            minimum: this.minConcurrent,
+            enforced: !minOk,
+        };
+
+        // ── 3. MEMORY SCAN: Query HeadyMemory for context ──
+        let memoryContext = null;
+        const payload = task.payload || {};
+        const queryText = payload.message || payload.content || payload.text ||
+            payload.query || payload.code || payload.prompt || "";
+
+        if (this.vectorMem && queryText && queryText.length >= 5) {
+            try {
+                const memories = await this.vectorMem.queryMemory(queryText, 3);
+                const relevant = memories.filter(m => m.score > 0.3);
+                if (relevant.length > 0) {
+                    memoryContext = relevant.map(m => m.content).join("\n---\n");
+                    // Inject retrieved context into payload
+                    const prefix = `[HeadyBrain Context — ${relevant.length} memories]\n${memoryContext}\n[End Context]\n\n`;
+                    if (payload.message) payload.message = prefix + payload.message;
+                    else if (payload.content) payload.content = prefix + payload.content;
+                    else if (payload.text) payload.text = prefix + payload.text;
+                    else if (payload.prompt) payload.prompt = prefix + payload.prompt;
+                }
+                validation.checks.memory = { pass: true, matches: relevant.length, queryLength: queryText.length };
+            } catch (memErr) {
+                validation.checks.memory = { pass: false, error: memErr.message };
+            }
+        } else {
+            validation.checks.memory = { pass: true, skipped: !queryText || queryText.length < 5 };
+        }
+
+        // ── 4. PATTERN CHECK: Known optimization opportunities ──
+        const knownPatterns = {
+            chat: { optimization: "stream-first", note: "prefer streaming for chat" },
+            analyze: { optimization: "batch-friendly", note: "can batch multiple analyses" },
+            embed: { optimization: "cache-embeddings", note: "cache identical text embeddings" },
+            search: { optimization: "zone-first", note: "use 3D spatial zone for locality" },
+        };
+        validation.checks.patterns = {
+            pass: true,
+            matched: knownPatterns[task.action] || null,
+        };
+
+        // ── 5. AUDIT ──
+        this._audit({ type: "validator:pre-action", ...validation });
+
+        return {
+            valid: handlerExists,
+            context: memoryContext,
+            patterns: knownPatterns[task.action] || null,
+            supervisorCount: this.supervisors.size,
+            validation,
+        };
+    }
+
+    /**
      * Submit a task — the primary entry point.
-     * ENFORCES: memory scan → dispatch → store result
+     * ENFORCES: HeadyValidator → dispatch → store result
      */
     async submit(task) {
+        // ═══ HeadyValidator: ALWAYS runs first ═══
+        const preCheck = await this._headyValidator(task);
+
         const serviceGroup = this.router.route(task);
         const supervisor = this._getOrCreateSupervisor(serviceGroup);
 
@@ -282,33 +374,12 @@ class AgentOrchestrator extends EventEmitter {
 
         const start = Date.now();
         supervisor.busy = true;
-        this._audit({ type: "task:start", action: task.action, supervisor: supervisor.id, serviceGroup });
+        this._audit({ type: "task:start", action: task.action, supervisor: supervisor.id, serviceGroup, validated: preCheck.valid });
 
         try {
-            // ── MEMORY-FIRST: Scan persistent memory BEFORE dispatch ──
-            let vectorContext = null;
             const payload = task.payload || {};
             const queryText = payload.message || payload.content || payload.text || payload.query || payload.code || payload.prompt || "";
-
-            if (this.vectorMem && queryText && queryText.length >= 5) {
-                try {
-                    const memories = await this.vectorMem.queryMemory(queryText, 3);
-                    const relevant = memories.filter(m => m.score > 0.3);
-                    if (relevant.length > 0) {
-                        vectorContext = relevant.map(m => m.content).join("\n---\n");
-                        // Inject context into payload
-                        const prefix = `[HeadyBrain Context — ${relevant.length} memories]\n${vectorContext}\n[End Context]\n\n`;
-                        if (payload.message) payload.message = prefix + payload.message;
-                        else if (payload.content) payload.content = prefix + payload.content;
-                        else if (payload.text) payload.text = prefix + payload.text;
-                        else if (payload.prompt) payload.prompt = prefix + payload.prompt;
-                    }
-                    this._audit({ type: "memory:scan", action: task.action, matches: relevant.length, query_length: queryText.length });
-                } catch (memErr) {
-                    // Memory scan failed — continue without, don't block
-                    this._audit({ type: "memory:scan_error", error: memErr.message });
-                }
-            }
+            // Memory scan already done by _headyValidator() — context injected into payload
 
             let result;
             const handler = this.handlers.get(task.action);
@@ -346,7 +417,8 @@ class AgentOrchestrator extends EventEmitter {
                 latency: Date.now() - start,
                 supervisor: supervisor.id,
                 serviceGroup,
-                memoryScanned: !!vectorContext,
+                memoryScanned: !!preCheck.context,
+                validated: preCheck.valid,
             };
 
             this._audit({ type: "task:complete", action: task.action, supervisor: supervisor.id, latency: taskRecord.latency });

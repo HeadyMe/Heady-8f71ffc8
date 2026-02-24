@@ -411,5 +411,12 @@
     "healthyCount": 19,
     "totalCount": 19,
     "ts": "2026-02-24T07:39:06.262Z"
+  },
+  {
+    "scanId": "deep-scan-1771919112305",
+    "overallScore": 0.54,
+    "healthyCount": 19,
+    "totalCount": 19,
+    "ts": "2026-02-24T07:45:12.377Z"
   }
 ]
