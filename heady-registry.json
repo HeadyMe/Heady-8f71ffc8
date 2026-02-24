@@ -20,10 +20,10 @@
   "components": [
     {
       "id": "heady-promoter",
-      "name": "Headypromoter",
+      "name": "HeadyPromoter",
       "type": "orchestration",
       "version": "4.0.0",
-      "sourceOfTruth": "src/hc/Headypromoter.js",
+      "sourceOfTruth": "src/hc/HeadyPromoter.js",
       "responsibilities": [
         "taskRouting",
         "policyEnforcement",
@@ -618,7 +618,7 @@
     {
       "id": "task-routing",
       "name": "Task Routing",
-      "owner": "Headypromoter",
+      "owner": "HeadyPromoter",
       "inputs": [
         "events",
         "registry",
@@ -638,7 +638,7 @@
         "hcfullpipeline"
       ],
       "status": "active",
-      "sourceOfTruth": "src/hc/Headypromoter.js"
+      "sourceOfTruth": "src/hc/HeadyPromoter.js"
     },
     {
       "id": "heady-battle-mode",

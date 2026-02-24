@@ -10,7 +10,7 @@
 ```
 1. ASK       → Intent captured (voice, chat, code change, API call)
 2. PLAN      → HeadyJules decomposes into DAG subtasks
-3. ROUTE     → Headypromoter selects AI nodes + MCP tools (ensemble-first)
+3. ROUTE     → HeadyPromoter selects AI nodes + MCP tools (ensemble-first)
 4. EXECUTE   → Tools run via MCP connectors; 7 AI nodes produce results
 5. VALIDATE  → Arena Mode (7 strategies) + HeadySims (UCB1) + HeadyBattle (Socratic)
 6. PROVE     → Receipt: models used, tools invoked, cost, scores, outcome
@@ -24,7 +24,7 @@
 
 | Component | Type | Role | Criticality | Source |
 |-----------|------|------|-------------|--------|
-| **Headypromoter** | Orchestration | Task routing, policy enforcement, parallel execution, worker management | Critical | `src/hc/Headypromoter.js` |
+| **HeadyPromoter** | Orchestration | Task routing, policy enforcement, parallel execution, worker management | Critical | `src/hc/HeadyPromoter.js` |
 | **HeadyManager** | API Gateway | Request routing, authentication, rate limiting | Critical | `heady-manager.js` (126KB) |
 | **HCBrain** | Intelligence | Meta-control, readiness evaluation, governance, auto-tuning | Critical | `src/hcbrain.js` |
 | **HeadyCoder** | Coding Orchestrator | Ensemble coding, multi-node routing, anti-template enforcement, HeadyBattle integration, cost optimization | Critical | `configs/heady-coder.yaml` |

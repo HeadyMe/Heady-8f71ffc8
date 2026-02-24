@@ -27,7 +27,7 @@ Heady is an **AI execution platform** that routes tasks across multiple AI engin
 
 ### Pillar A — Enterprise Platform Spine
 
-**HeadyManager → Headypromoter → HCBrain → HeadyLens → HeadyConductor**
+**HeadyManager → HeadyPromoter → HCBrain → HeadyLens → HeadyConductor**
 
 126KB Express gateway (port 3301) providing API routing, Helmet CSP, CORS, rate limiting, Swagger docs, WebSocket real-time events, and an internal event bus. 19 internal services spanning inference, orchestration, competition, persistence, monitoring, operations, and AI node management. Registry-driven with ensemble-first routing and anti-template policy enforcement.
 
@@ -51,7 +51,7 @@ All three pillars run the same execution lifecycle:
 
 ```
 Ask → Plan (HeadyJules decomposition)
-    → Route (Headypromoter ensemble-first)
+    → Route (HeadyPromoter ensemble-first)
     → Execute (MCP tools + AI nodes)
     → Validate (Arena Mode + HeadySims + HeadyBattle)
     → Prove (receipt: models, tools, cost, scores)
@@ -91,7 +91,7 @@ Competitors ship with hope. Heady ships with tournaments (7 strategies), Monte C
 
 | Component | Type | Criticality |
 |-----------|------|-------------|
-| Headypromoter | Orchestration (task routing, policy, workers) | Critical |
+| HeadyPromoter | Orchestration (task routing, policy, workers) | Critical |
 | HeadyManager | API Gateway (auth, rate-limit, routing) | Critical |
 | HCBrain | Intelligence (meta-control, governance, auto-tuning) | Critical |
 | HeadyCoder | Coding Orchestrator (ensemble, anti-template, battle integration) | Critical |
