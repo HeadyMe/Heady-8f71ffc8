@@ -23,7 +23,8 @@ const path = require("path");
 
 const AUDIT_PATH = path.join(__dirname, "..", "data", "agent-orchestrator-audit.jsonl");
 const PHI = 1.6180339887;
-const MAX_CONCURRENT = 50;
+const MIN_CONCURRENT = 150;  // MINIMUM supervisors running at all times
+const MAX_CONCURRENT = 500;  // Ceiling
 const IDLE_RECLAIM_MS = Math.round(PHI ** 6 * 1000); // φ⁶ ≈ 17,944ms
 const SCALE_THRESHOLD = 3;
 const SCALE_CHECK_MS = Math.round(PHI ** 4 * 1000);  // φ⁴ ≈ 6,854ms
@@ -88,6 +89,7 @@ class DynamicRouter {
 class AgentOrchestrator extends EventEmitter {
     constructor(options = {}) {
         super();
+        this.minConcurrent = options.minConcurrent || MIN_CONCURRENT;
         this.maxConcurrent = options.maxConcurrent || MAX_CONCURRENT;
         this.supervisors = new Map();
         this.taskQueue = [];
@@ -104,8 +106,8 @@ class AgentOrchestrator extends EventEmitter {
         // Per-group node counts for liquid scaling
         this.groupCounts = {};
         this.groupLimits = {
-            reasoning: 10, embedding: 8, search: 6,
-            creative: 5, battle: 4, ops: 3,
+            reasoning: 40, embedding: 30, search: 25,
+            creative: 25, battle: 15, ops: 15,
         };
 
         // Ensure data dir
@@ -114,6 +116,45 @@ class AgentOrchestrator extends EventEmitter {
 
         // Start auto-scaling loop
         this._scaleInterval = setInterval(() => this._autoScale(), SCALE_CHECK_MS);
+
+        // Pre-spawn minimum supervisors across all service groups
+        this._ensureMinimum();
+    }
+
+    /**
+     * Ensure minimum supervisors are always running.
+     * Distributes MIN_CONCURRENT across all service groups proportionally.
+     * FORCE-CREATES new supervisors (doesn't reuse idle ones).
+     */
+    _ensureMinimum() {
+        const currentTotal = this.supervisors.size;
+        const needed = Math.max(0, this.minConcurrent - currentTotal);
+        if (needed <= 0) return;
+
+        const groups = Object.keys(this.groupLimits);
+        const totalLimits = Object.values(this.groupLimits).reduce((a, b) => a + b, 0);
+        let spawned = 0;
+
+        for (const group of groups) {
+            const groupTarget = Math.ceil((this.groupLimits[group] / totalLimits) * needed);
+            const groupLimit = this.groupLimits[group] || 5;
+
+            for (let i = 0; i < groupTarget && spawned < needed; i++) {
+                const groupCount = this.groupCounts[group] || 0;
+                if (groupCount >= groupLimit || this.supervisors.size >= this.maxConcurrent) break;
+
+                const nodeNum = groupCount + 1;
+                const id = `${group}-node-${nodeNum}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+                const supervisor = new HeadySupervisor(id, group);
+                this.supervisors.set(id, supervisor);
+                this.groupCounts[group] = nodeNum;
+                this.emit("supervisor:spawned", { id, serviceGroup: group, nodeNum });
+                spawned++;
+            }
+        }
+
+        this._audit({ type: "minimum:enforced", minConcurrent: this.minConcurrent, spawned, total: this.supervisors.size });
+        console.log(`  ∞ Orchestrator: MIN_CONCURRENT enforced — ${this.supervisors.size} HeadySupervisors active (min ${this.minConcurrent})`);
     }
 
     /**
@@ -187,17 +228,24 @@ class AgentOrchestrator extends EventEmitter {
                 if (pressure >= 2) this.scaleUp(group, Math.min(pressure, 3));
             }
         }
-        // Scale DOWN idle agents
+        // Scale DOWN idle supervisors — but NEVER below MIN_CONCURRENT
         const now = Date.now();
-        for (const [id, agent] of this.supervisors) {
-            if (!agent.busy && agent.taskCount > 0 && (now - agent.lastActive) > IDLE_RECLAIM_MS) {
-                const groupSupervisors = [...this.supervisors.values()].filter(a => a.serviceGroup === agent.serviceGroup);
-                if (groupSupervisors.length > 1) {
-                    this.supervisors.delete(id);
-                    this.groupCounts[agent.serviceGroup] = Math.max(0, (this.groupCounts[agent.serviceGroup] || 1) - 1);
-                    this._audit({ type: "liquid:idle_reclaim", agent: id, idle_ms: now - agent.lastActive });
+        if (this.supervisors.size > this.minConcurrent) {
+            for (const [id, supervisor] of this.supervisors) {
+                if (this.supervisors.size <= this.minConcurrent) break; // Never go below minimum
+                if (!supervisor.busy && supervisor.taskCount > 0 && (now - supervisor.lastActive) > IDLE_RECLAIM_MS) {
+                    const groupSupervisors = [...this.supervisors.values()].filter(a => a.serviceGroup === supervisor.serviceGroup);
+                    if (groupSupervisors.length > 1) {
+                        this.supervisors.delete(id);
+                        this.groupCounts[supervisor.serviceGroup] = Math.max(0, (this.groupCounts[supervisor.serviceGroup] || 1) - 1);
+                        this._audit({ type: "liquid:idle_reclaim", supervisor: id, idle_ms: now - supervisor.lastActive });
+                    }
                 }
             }
+        }
+        // Re-enforce minimum if somehow below
+        if (this.supervisors.size < this.minConcurrent) {
+            this._ensureMinimum();
         }
     }
 
