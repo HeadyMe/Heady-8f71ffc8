@@ -11,7 +11,7 @@ jobs:
     name: Anti-Template Policy Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -25,7 +25,7 @@ jobs:
     name: Registry Schema Validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Validate heady-registry.json
         run: |
@@ -51,7 +51,7 @@ jobs:
     name: Config Sync Verification
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Verify critical configs exist
         run: |
@@ -68,7 +68,7 @@ jobs:
     name: File Governance Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Check root file placement
         run: |
