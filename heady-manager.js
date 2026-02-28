@@ -65,8 +65,13 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const compression = require("compression");
-const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const { cspProfilesMiddleware } = require('./src/middleware/csp-profiles');
+const {
+  parseAllowedOrigins,
+  validateAllowedOrigins,
+  createCorsOptions,
+} = require('./src/middleware/cors-config');
 
 // Load remote resources config
 const remoteConfig = yaml.load(fs.readFileSync('./configs/remote-resources.yaml', 'utf8'));
@@ -138,31 +143,15 @@ try {
 
 const PORT = process.env.HEADY_PORT || 3301;
 const app = express();
+const allowedOrigins = validateAllowedOrigins({
+  allowedOrigins: parseAllowedOrigins(),
+});
 
 // ─── Middleware ─────────────────────────────────────────────────────
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://apis.google.com", "https://www.gstatic.com", "https://cdn.jsdelivr.net"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https:", "blob:"],
-      connectSrc: ["'self'", "https://manager.headysystems.com", "https://api.anthropic.com", "https://api.openai.com", "https://*.headysystems.com", "https://*.headyme.com", "wss:", "ws:"],
-      frameSrc: ["'self'", "https://accounts.google.com"],
-    },
-  },
-  crossOriginEmbedderPolicy: false,
-  strictTransportSecurity: { maxAge: 31536000, includeSubDomains: true },
-  xContentTypeOptions: true,
-  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
-}));
+app.use(cspProfilesMiddleware());
 app.use(compression());
 app.use(express.json({ limit: "5mb" }));
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : "*",
-  credentials: true,
-}));
+app.use(cors(createCorsOptions({ allowedOrigins })));
 
 // ─── Heady Production Middleware ────────────────────────────────────
 try {
