@@ -237,7 +237,7 @@ jobs:
         run: |
           # Wait for deployment and check health
           sleep 30
-          curl -f "https://${DOMAINS[$domain]}/api/health" || exit 1
+          curl -f "https://${DOMAINS[$domain]}/health/live" || exit 1
           
       - name: Notify Success
         run: |

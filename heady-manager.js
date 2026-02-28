@@ -139,6 +139,9 @@ try {
 const PORT = process.env.HEADY_PORT || 3301;
 const app = express();
 
+// ─── Probe Endpoints (canonical) ───────────────────────────────────
+app.use('/health', require('./src/routes/health-routes'));
+
 // ─── Middleware ─────────────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
@@ -513,6 +516,7 @@ function readJsonSafe(filePath) {
  * @returns {Object} Service pulse data
  */
 app.get("/api/health", (req, res) => {
+  // Compatibility endpoint: keep legacy /api/health while standard probes live under /health/*
   res.json({ status: "ok", service: "heady-manager", timestamp: new Date().toISOString() });
 });
 
