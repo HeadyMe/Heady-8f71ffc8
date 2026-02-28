@@ -12,14 +12,23 @@ const router = express.Router();
 
 const startTime = Date.now();
 
-// ── Liveness: is the process alive? ─────────────────────────────────
-router.get('/live', (req, res) => {
-    res.json({
+function getUptimeSeconds() {
+    return Math.floor((Date.now() - startTime) / 1000);
+}
+
+function buildLiveHealth() {
+    return {
         status: 'ok',
-        uptime: Math.floor((Date.now() - startTime) / 1000),
+        uptime: getUptimeSeconds(),
         timestamp: new Date().toISOString(),
-    });
-});
+    };
+}
+
+// ── Liveness: is the process alive? ─────────────────────────────────
+function handleLive(req, res) {
+    res.json(buildLiveHealth());
+}
+router.get('/live', handleLive);
 
 // ── Readiness: can we serve traffic? ────────────────────────────────
 router.get('/ready', async (req, res) => {
@@ -76,7 +85,7 @@ router.get('/ready', async (req, res) => {
     res.status(allReady ? 200 : 503).json({
         status: allReady ? 'ready' : 'not_ready',
         checks,
-        uptime: Math.floor((Date.now() - startTime) / 1000),
+        uptime: getUptimeSeconds(),
         timestamp: new Date().toISOString(),
     });
 });
@@ -94,7 +103,7 @@ router.get('/full', async (req, res) => {
         service: 'heady-manager',
         version: pkg.version || 'unknown',
         environment: process.env.NODE_ENV || 'development',
-        uptime: Math.floor((Date.now() - startTime) / 1000),
+        uptime: getUptimeSeconds(),
         node: process.version,
         platform: process.platform,
         arch: process.arch,
@@ -106,4 +115,8 @@ router.get('/full', async (req, res) => {
     });
 });
 
-module.exports = router;
+module.exports = {
+    router,
+    buildLiveHealth,
+    handleLive,
+};

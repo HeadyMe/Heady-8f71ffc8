@@ -20,7 +20,7 @@ jobs:
         run: |
           timeout 10 node heady-manager.js &
           sleep 5
-          curl -f http://localhost:3301/api/pulse
+          curl -f http://localhost:3301/health/live
           kill %1
 
   deploy:

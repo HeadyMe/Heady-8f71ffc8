@@ -236,6 +236,7 @@ app.use("/api/", rateLimit({
 }));
 
 const coreApi = require('./services/core-api');
+const { router: healthRoutes, buildLiveHealth } = require('./src/routes/health-routes');
 /**
  * @swagger
  * /api/health:
@@ -246,6 +247,7 @@ const coreApi = require('./services/core-api');
  *         description: Service is healthy
  */
 app.use("/api", coreApi);
+app.use('/health', healthRoutes);
 
 // ─── Swagger UI Setup ─────────────────────────────────────────────────
 try {
@@ -513,7 +515,12 @@ function readJsonSafe(filePath) {
  * @returns {Object} Service pulse data
  */
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", service: "heady-manager", timestamp: new Date().toISOString() });
+  res.json({
+    ...buildLiveHealth(),
+    service: "heady-manager",
+    deprecated: true,
+    canonical: "/health/live",
+  });
 });
 
 app.get("/api/pulse", (req, res) => {
@@ -526,7 +533,7 @@ app.get("/api/pulse", (req, res) => {
     active_layer: activeLayer,
     layer_endpoint: LAYERS[activeLayer]?.endpoint || "",
     endpoints: [
-      "/api/health", "/api/pulse", "/api/registry", "/api/registry/component/:id",
+      "/health/live", "/health/ready", "/health/full", "/api/health", "/api/pulse", "/api/registry", "/api/registry/component/:id",
       "/api/registry/environments", "/api/registry/docs", "/api/registry/notebooks",
       "/api/registry/patterns", "/api/registry/workflows", "/api/registry/ai-nodes",
       "/api/nodes", "/api/system/status", "/api/pipeline/*",
@@ -994,7 +1001,7 @@ server.listen(PORT, '0.0.0.0', () => {
   logger.logNodeActivity("CONDUCTOR", `${c.bold}${c.purple}│${c.reset}  ${c.dim}Gateway:${c.reset}      ${c.bold}${c.cyan}http://0.0.0.0:${PORT}${c.reset}`);
   logger.logNodeActivity("CONDUCTOR", `${c.bold}${c.purple}│${c.reset}  ${c.dim}Voice Relay:${c.reset}  ${c.purple}ws://0.0.0.0:${PORT}/ws/voice/:sessionId${c.reset}`);
   logger.logNodeActivity("CONDUCTOR", `${c.bold}${c.purple}│${c.reset}  ${c.dim}API Docs:${c.reset}     ${c.blue}http://0.0.0.0:${PORT}/api-docs${c.reset}`);
-  logger.logNodeActivity("CONDUCTOR", `${c.bold}${c.purple}│${c.reset}  ${c.dim}Health/Pulse:${c.reset} ${c.green}/api/health | /api/pulse${c.reset}`);
+  logger.logNodeActivity("CONDUCTOR", `${c.bold}${c.purple}│${c.reset}  ${c.dim}Health/Pulse:${c.reset} ${c.green}/health/live | /api/health | /api/pulse${c.reset}`);
   logger.logNodeActivity("CONDUCTOR", `${c.bold}${c.purple}╰────────────────────────────────────────────────────────╯${c.reset}\n`);
 });
 
