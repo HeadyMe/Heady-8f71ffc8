@@ -1,19 +1,37 @@
 // PM2 Ecosystem Configuration
 // Manages all Heady AI Platform services
 module.exports = {
+    deploy: {
+        production: {
+            user: 'headyme',
+            host: process.env.PM2_DEPLOY_HOST || '127.0.0.1',
+            ref: 'origin/main',
+            repo: process.env.PM2_DEPLOY_REPO || 'git@github.com:HeadySystems/Heady.git',
+            path: '/home/headyme/Heady',
+            'post-deploy': 'npm ci --omit=dev && pm2 startOrReload ecosystem.config.cjs --only heady-manager --update-env && pm2 reload ecosystem.config.cjs --update-env',
+        },
+    },
     apps: [
         // ── Core Services ──
         {
             name: 'heady-manager',
             script: 'heady-manager.js',
             cwd: '/home/headyme/Heady',
-            instances: 1,
-            exec_mode: 'fork',
+            instances: process.env.HEADY_MANAGER_INSTANCES || 'max',
+            exec_mode: 'cluster',
+            instance_var: 'INSTANCE_ID',
+            node_args: `--max-old-space-size=${process.env.HEADY_MANAGER_HEAP_MB || 768}`,
             env: {
                 NODE_ENV: 'production',
                 NODE_TLS_REJECT_UNAUTHORIZED: '0',
                 PORT: 3301,
                 HF_TOKEN: process.env.HF_TOKEN || '',
+                CLUSTER_STATE_BACKEND: process.env.CLUSTER_STATE_BACKEND || 'redis',
+                REDIS_URL: process.env.REDIS_URL || '',
+                HTTP_MAX_CONNECTIONS: process.env.HTTP_MAX_CONNECTIONS || 2000,
+                HTTP_KEEP_ALIVE_TIMEOUT_MS: process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS || 65000,
+                HTTP_HEADERS_TIMEOUT_MS: process.env.HTTP_HEADERS_TIMEOUT_MS || 70000,
+                HTTP_REQUEST_TIMEOUT_MS: process.env.HTTP_REQUEST_TIMEOUT_MS || 30000,
             },
             max_memory_restart: '512M',
             min_uptime: '10s',
@@ -21,6 +39,8 @@ module.exports = {
             restart_delay: 3000,
             kill_timeout: 5000,
             listen_timeout: 10000,
+            wait_ready: true,
+            shutdown_with_message: true,
             watch: false,
             error_file: '/home/headyme/Heady/logs/manager-error.log',
             out_file: '/home/headyme/Heady/logs/manager-out.log',

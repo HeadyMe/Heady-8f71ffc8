@@ -1,7 +1,7 @@
 {
   "name": "heady-systems",
   "version": "3.0.0",
-  "description": "Heady AI Platform — Autonomous multi-agent AI operating system with 20 specialized intelligence nodes, federated liquid routing, and post-quantum security.",
+  "description": "Heady AI Platform \u2014 Autonomous multi-agent AI operating system with 20 specialized intelligence nodes, federated liquid routing, and post-quantum security.",
   "main": "heady-manager.js",
   "license": "UNLICENSED",
   "author": {
@@ -71,7 +71,9 @@
     "scan:stale": "node scripts/stale-scanner.js",
     "scan:seo": "node scripts/seo-batch-improve.js",
     "scan:quality": "node scripts/code-quality-batch.js",
-    "logs:setup": "node scripts/setup-log-rotation.js"
+    "logs:setup": "node scripts/setup-log-rotation.js",
+    "loadtest:tune": "node scripts/ops/load-test-tuning.js",
+    "scale:verify": "node scripts/ops/verify-horizontal-scale.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",

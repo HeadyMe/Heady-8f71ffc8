@@ -39,6 +39,7 @@ const fetch = require('node-fetch');
 const { createAppAuth } = require('@octokit/auth-app');
 const swaggerUi = require('swagger-ui-express');
 const WebSocket = require('ws');
+const Redis = (()=>{try{return require('ioredis')}catch(e){return null}})();
 
 /**
  * @swagger
@@ -66,7 +67,6 @@ const express = require("express");
 const cors = require("cors");
 const compression = require("compression");
 const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
 
 // Load remote resources config
 const remoteConfig = yaml.load(fs.readFileSync('./configs/remote-resources.yaml', 'utf8'));
@@ -223,17 +223,61 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use("/api/", rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 1000,
-  standardHeaders: true,
-  legacyHeaders: false,
-  // Exempt internal/localhost traffic — swarm + internal IPC must not be rate-limited
-  skip: (req) => {
-    const ip = req.ip || req.connection?.remoteAddress || "";
-    return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1" || ip === "localhost";
-  },
-}));
+const rateLimitWindowMs = Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000);
+const rateLimitMax = Number(process.env.RATE_LIMIT_MAX || 1000);
+const localRateLimitStore = new Map();
+
+async function incrementRateLimit(key) {
+  if (redisEnabled && voiceRedis) {
+    const rlKey = `rl:${key}`;
+    const count = await voiceRedis.incr(rlKey);
+    if (count === 1) await voiceRedis.pexpire(rlKey, rateLimitWindowMs);
+    const ttl = await voiceRedis.pttl(rlKey);
+    return { count, resetInMs: Math.max(0, ttl) };
+  }
+
+  const now = Date.now();
+  const record = localRateLimitStore.get(key);
+  if (!record || now > record.expiresAt) {
+    localRateLimitStore.set(key, { count: 1, expiresAt: now + rateLimitWindowMs });
+    return { count: 1, resetInMs: rateLimitWindowMs };
+  }
+
+  record.count += 1;
+  return { count: record.count, resetInMs: Math.max(0, record.expiresAt - now) };
+}
+
+app.use('/api/', async (req, res, next) => {
+  try {
+    // Exempt internal/localhost traffic — swarm + internal IPC must not be rate-limited
+    const ip = req.ip || req.connection?.remoteAddress || '';
+    const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip === 'localhost';
+    if (isLocal) return next();
+
+    const key = req.headers['x-api-key'] || ip || 'unknown';
+    const { count, resetInMs } = await incrementRateLimit(key);
+    const remaining = Math.max(0, rateLimitMax - count);
+
+    res.setHeader('X-RateLimit-Limit', String(rateLimitMax));
+    res.setHeader('X-RateLimit-Remaining', String(remaining));
+    res.setHeader('X-RateLimit-Reset', new Date(Date.now() + resetInMs).toISOString());
+
+    if (count > rateLimitMax) {
+      return res.status(429).json({
+        error: 'Too Many Requests',
+        retryAfterMs: resetInMs,
+        limit: rateLimitMax,
+        windowMs: rateLimitWindowMs,
+        backend: redisEnabled ? 'redis' : 'memory',
+      });
+    }
+
+    next();
+  } catch (err) {
+    logger.logNodeActivity('CONDUCTOR', `  ⚠ Rate limiter degraded: ${err.message}`);
+    next();
+  }
+});
 
 const coreApi = require('./services/core-api');
 /**
@@ -839,30 +883,83 @@ require("./src/routes/aloha")(app, {
 });
 // ─── Voice Relay WebSocket System ─────────────────────────────────────
 // Cross-device voice-to-text relay: phone dictates → mini computer receives
-const voiceSessions = new Map(); // sessionId → { sender: ws, receivers: Set<ws>, created, lastActivity }
+const voiceSessions = new Map(); // local ws bindings for this worker
+const voiceSessionMetaCache = new Map(); // cluster-safe fallback when Redis unavailable
+const redisUrl = process.env.REDIS_URL || '';
+const clusterStateBackend = (process.env.CLUSTER_STATE_BACKEND || 'memory').toLowerCase();
+const redisEnabled = clusterStateBackend === 'redis' && !!Redis && !!redisUrl;
+const voiceRedis = redisEnabled ? new Redis(redisUrl) : null;
+
+async function loadVoiceSessionMeta(sessionId) {
+  if (!redisEnabled) return voiceSessionMetaCache.get(sessionId) || null;
+  const raw = await voiceRedis.get(`voice:session:${sessionId}`);
+  return raw ? JSON.parse(raw) : null;
+}
+
+async function saveVoiceSessionMeta(sessionId, meta) {
+  if (!meta) return;
+  if (!redisEnabled) {
+    voiceSessionMetaCache.set(sessionId, meta);
+    return;
+  }
+  await voiceRedis.set(`voice:session:${sessionId}`, JSON.stringify(meta), 'EX', 7200);
+}
+
+async function touchVoiceSessionMeta(sessionId, patch = {}) {
+  const baseline = (await loadVoiceSessionMeta(sessionId)) || {
+    created: Date.now(),
+    lastActivity: Date.now(),
+    senderConnected: false,
+    receiverCount: 0,
+  };
+  const next = { ...baseline, ...patch, lastActivity: Date.now() };
+  await saveVoiceSessionMeta(sessionId, next);
+  return next;
+}
 
 // Generate / retrieve voice session for pairing
-app.get('/api/voice/session', (req, res) => {
+app.get('/api/voice/session', async (req, res) => {
   const sessionId = req.query.id || `voice-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   if (!voiceSessions.has(sessionId)) {
     voiceSessions.set(sessionId, { sender: null, receivers: new Set(), created: Date.now(), lastActivity: Date.now() });
   }
-  const session = voiceSessions.get(sessionId);
+  const localSession = voiceSessions.get(sessionId);
+  const meta = await touchVoiceSessionMeta(sessionId, {
+    created: localSession.created || Date.now(),
+    senderConnected: !!localSession.sender,
+    receiverCount: localSession.receivers.size,
+  });
+
   res.json({
     sessionId,
-    hasSender: !!session.sender,
-    receiverCount: session.receivers.size,
-    created: new Date(session.created).toISOString(),
+    hasSender: !!meta.senderConnected,
+    receiverCount: meta.receiverCount || 0,
+    created: new Date(meta.created).toISOString(),
+    backend: redisEnabled ? 'redis' : 'memory',
     ts: new Date().toISOString()
   });
 });
 
-app.get('/api/voice/sessions', (req, res) => {
+app.get('/api/voice/sessions', async (req, res) => {
   const sessions = [];
-  voiceSessions.forEach((v, k) => sessions.push({
-    sessionId: k, hasSender: !!v.sender, receiverCount: v.receivers.size,
-    created: new Date(v.created).toISOString(), lastActivity: new Date(v.lastActivity).toISOString()
-  }));
+  for (const [k, v] of voiceSessions.entries()) {
+    const meta = (await loadVoiceSessionMeta(k)) || {
+      created: v.created,
+      lastActivity: v.lastActivity,
+      senderConnected: !!v.sender,
+      receiverCount: v.receivers.size,
+    };
+
+    sessions.push({
+      sessionId: k,
+      hasSender: !!meta.senderConnected,
+      receiverCount: meta.receiverCount || 0,
+      created: new Date(meta.created).toISOString(),
+      lastActivity: new Date(meta.lastActivity).toISOString(),
+      backend: redisEnabled ? 'redis' : 'memory',
+    });
+  }
+
   res.json({ sessions, ts: new Date().toISOString() });
 });
 
@@ -897,6 +994,17 @@ if (fs.existsSync(path.join(certDir, 'server.key')) && fs.existsSync(path.join(c
   logger.logNodeActivity("BUILDER", "  ⚠️ No certs found. Falling back to HTTP Server");
 }
 
+const maxConnections = Number(process.env.HTTP_MAX_CONNECTIONS || 2000);
+const keepAliveTimeout = Number(process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS || 65000);
+const headersTimeout = Number(process.env.HTTP_HEADERS_TIMEOUT_MS || 70000);
+const requestTimeout = Number(process.env.HTTP_REQUEST_TIMEOUT_MS || 30000);
+server.maxConnections = maxConnections;
+server.keepAliveTimeout = keepAliveTimeout;
+server.headersTimeout = headersTimeout;
+server.requestTimeout = requestTimeout;
+
+logger.logNodeActivity("BUILDER", `  ∞ Server Tuning: maxConnections=${maxConnections}, keepAlive=${keepAliveTimeout}ms, headersTimeout=${headersTimeout}ms, requestTimeout=${requestTimeout}ms`);
+
 // WebSocket server for voice relay (no-server mode — upgrade handled manually)
 const voiceWss = new WebSocket.Server({ noServer: true });
 
@@ -924,6 +1032,7 @@ voiceWss.on('connection', (ws, request, sessionId) => {
 
   if (role === 'sender') {
     session.sender = ws;
+    touchVoiceSessionMeta(sessionId, { senderConnected: true, receiverCount: session.receivers.size, created: session.created }).catch(() => {});
     logger.logNodeActivity("CONDUCTOR", `[VoiceRelay] Sender connected to session ${sessionId}`);
     // Notify receivers that sender connected
     session.receivers.forEach(r => {
@@ -933,6 +1042,7 @@ voiceWss.on('connection', (ws, request, sessionId) => {
     });
   } else {
     session.receivers.add(ws);
+    touchVoiceSessionMeta(sessionId, { senderConnected: !!session.sender, receiverCount: session.receivers.size, created: session.created }).catch(() => {});
     logger.logNodeActivity("CONDUCTOR", `[VoiceRelay] Receiver connected to session ${sessionId} (${session.receivers.size} total)`);
     // Tell receiver if sender is already present
     if (session.sender && session.sender.readyState === WebSocket.OPEN) {
@@ -942,6 +1052,7 @@ voiceWss.on('connection', (ws, request, sessionId) => {
 
   ws.on('message', (data) => {
     session.lastActivity = Date.now();
+    touchVoiceSessionMeta(sessionId, { senderConnected: !!session.sender, receiverCount: session.receivers.size, created: session.created }).catch(() => {});
     try {
       const msg = JSON.parse(data);
       // Relay voice transcription from sender → all receivers
@@ -962,6 +1073,7 @@ voiceWss.on('connection', (ws, request, sessionId) => {
   ws.on('close', () => {
     if (role === 'sender') {
       session.sender = null;
+      touchVoiceSessionMeta(sessionId, { senderConnected: false, receiverCount: session.receivers.size, created: session.created }).catch(() => {});
       logger.logNodeActivity("CONDUCTOR", `[VoiceRelay] Sender disconnected from session ${sessionId}`);
       session.receivers.forEach(r => {
         if (r.readyState === WebSocket.OPEN) {
@@ -970,11 +1082,14 @@ voiceWss.on('connection', (ws, request, sessionId) => {
       });
     } else {
       session.receivers.delete(ws);
+      touchVoiceSessionMeta(sessionId, { senderConnected: !!session.sender, receiverCount: session.receivers.size, created: session.created }).catch(() => {});
       logger.logNodeActivity("CONDUCTOR", `[VoiceRelay] Receiver disconnected from session ${sessionId} (${session.receivers.size} remain)`);
     }
     // Clean up empty sessions
     if (!session.sender && session.receivers.size === 0) {
       voiceSessions.delete(sessionId);
+      if (redisEnabled) voiceRedis.del(`voice:session:${sessionId}`).catch(() => {});
+      else voiceSessionMetaCache.delete(sessionId);
     }
   });
 
@@ -996,6 +1111,7 @@ server.listen(PORT, '0.0.0.0', () => {
   logger.logNodeActivity("CONDUCTOR", `${c.bold}${c.purple}│${c.reset}  ${c.dim}API Docs:${c.reset}     ${c.blue}http://0.0.0.0:${PORT}/api-docs${c.reset}`);
   logger.logNodeActivity("CONDUCTOR", `${c.bold}${c.purple}│${c.reset}  ${c.dim}Health/Pulse:${c.reset} ${c.green}/api/health | /api/pulse${c.reset}`);
   logger.logNodeActivity("CONDUCTOR", `${c.bold}${c.purple}╰────────────────────────────────────────────────────────╯${c.reset}\n`);
+  if (typeof process.send === 'function') process.send('ready');
 });
 
 try {
