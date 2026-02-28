@@ -1,0 +1,57 @@
+openapi: 3.1.0
+info:
+  title: Heady Manager API
+  version: 3.0.0
+  description: >-
+    API surface for the Heady Manager service. Canonical health probes are mounted
+    under `/health/*`.
+servers:
+  - url: http://localhost:3301
+    description: Local
+
+paths:
+  /health/live:
+    get:
+      summary: Liveness probe (canonical)
+      description: Returns process liveness metadata for orchestration health checks.
+      tags: [Health]
+      responses:
+        '200':
+          description: Service is alive
+  /health/ready:
+    get:
+      summary: Readiness probe (canonical)
+      description: Returns dependency readiness status for traffic eligibility.
+      tags: [Health]
+      responses:
+        '200':
+          description: Service is ready
+        '503':
+          description: Service is not ready
+  /health/full:
+    get:
+      summary: Full health diagnostics (canonical)
+      description: Returns extended runtime diagnostics for the service.
+      tags: [Health]
+      responses:
+        '200':
+          description: Full health payload
+
+  /api/health:
+    get:
+      summary: Backward-compatible health endpoint
+      description: Deprecated compatibility endpoint that reuses canonical `/health/live` logic.
+      deprecated: true
+      tags: [Health]
+      responses:
+        '200':
+          description: Service is alive
+
+  /api/pulse:
+    get:
+      summary: Service pulse
+      description: Returns active service metadata and endpoint inventory.
+      tags: [Health]
+      responses:
+        '200':
+          description: Pulse response
